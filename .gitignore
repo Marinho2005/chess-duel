@@ -1,0 +1,26 @@
+# Env
+.env
+
+# Elixir / Phoenix
+/backend/_build/
+/backend/cover/
+/backend/deps/
+/backend/doc/
+/backend/.fetch
+/backend/erl_crash.dump
+/backend/*.ez
+/backend/chess_duel_backend-*.tar
+/backend/priv/static/assets/
+/backend/priv/static/cache_manifest.json
+/backend/elixir_ls.debug*
+/backend/.elixir_ls/
+
+# Node / Nuxt
+/frontend/node_modules/
+/frontend/.nuxt/
+/frontend/.output/
+/frontend/dist/
+/frontend/.env
+
+# Docker
+docker-compose.override.yml

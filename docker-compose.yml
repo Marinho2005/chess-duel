@@ -1,0 +1,44 @@
+name: chess_duel
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: chess_duel_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chess_duel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chess_duel_password}
+      POSTGRES_DB: ${POSTGRES_DB:-chess_duel_dev}
+    ports:
+      - "5432:5432"
+    # postgres:18+ movimentou o PGDATA para um layout versionado sob
+    # /var/lib/postgresql (a imagem cria o subdiretorio major/minor).
+    # Montar em .../data, como nas versoes anteriores, faz o container
+    # rejeitar e reiniciar em loop. Montamos no pai e deixamos a imagem
+    # cuidar da estrutura interna.
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chess_duel} -d ${POSTGRES_DB:-chess_duel_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:latest
+    container_name: chess_duel_valkey
+    restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  valkey_data:
