@@ -11,6 +11,8 @@ type GameState = {
   moves: Move[]
   current_turn: string
   fen: string
+  white_time_remaining_ms: number
+  black_time_remaining_ms: number
 }
 
 type MoveMade = Move & {
@@ -20,10 +22,12 @@ type MoveMade = Move & {
   is_checkmate: boolean
   is_stalemate: boolean
   is_draw: boolean
+  white_time_remaining_ms: number
+  black_time_remaining_ms: number
 }
 
 type GameOver = {
-  reason: 'checkmate' | 'stalemate' | 'draw'
+  reason: 'checkmate' | 'stalemate' | 'draw' | 'timeout'
   winner: string | null
 }
 
@@ -33,6 +37,8 @@ const to = ref('')
 const moves = ref<Move[]>([])
 const currentTurn = ref('white')
 const fen = ref('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
+const whiteTimeRemainingMs = ref(180_000)
+const blackTimeRemainingMs = ref(180_000)
 const connectionStatus = ref('Conectando...')
 const errorMessage = ref('')
 const gameOverMessage = ref('')
@@ -55,6 +61,8 @@ onMounted(() => {
       moves.value = state.moves
       currentTurn.value = state.current_turn
       fen.value = state.fen
+      whiteTimeRemainingMs.value = state.white_time_remaining_ms
+      blackTimeRemainingMs.value = state.black_time_remaining_ms
       connectionStatus.value = `Conectado como ${playerId}`
     })
     .receive('error', (reason: unknown) => {
@@ -66,11 +74,16 @@ onMounted(() => {
     moves.value.push({ from: move.from, to: move.to, player: move.player })
     currentTurn.value = move.current_turn
     fen.value = move.new_fen
+    whiteTimeRemainingMs.value = move.white_time_remaining_ms
+    blackTimeRemainingMs.value = move.black_time_remaining_ms
     errorMessage.value = ''
   })
 
   channel.on('game_over', (result: GameOver) => {
-    if (result.reason === 'checkmate') {
+    if (result.reason === 'timeout') {
+      const winner = result.winner === 'white' ? 'brancas' : 'pretas'
+      gameOverMessage.value = `Fim de jogo por tempo esgotado. Vencedor: ${winner}`
+    } else if (result.reason === 'checkmate') {
       gameOverMessage.value = `Xeque-mate! Vencedor: ${result.winner}`
     } else if (result.reason === 'stalemate') {
       gameOverMessage.value = 'Partida encerrada por afogamento.'
@@ -110,6 +123,10 @@ function sendMove() {
     <h1>Partida em tempo real</h1>
     <p class="muted">Canal: <code>game:{{ gameId }}</code></p>
     <p>{{ connectionStatus }} · turno atual: <strong>{{ currentTurn }}</strong></p>
+    <div class="clocks">
+      <p>Brancas: <strong>{{ Math.ceil(whiteTimeRemainingMs / 1000) }}s</strong></p>
+      <p>Pretas: <strong>{{ Math.ceil(blackTimeRemainingMs / 1000) }}s</strong></p>
+    </div>
     <p class="fen"><strong>FEN:</strong> <code>{{ fen }}</code></p>
     <p v-if="gameOverMessage" class="game-over">{{ gameOverMessage }}</p>
 
@@ -151,6 +168,7 @@ function sendMove() {
   font-family: system-ui, sans-serif;
 }
 .muted { color: #9aa0aa; }
+.clocks { display: flex; gap: 2rem; }
 .move-form {
   display: flex;
   align-items: end;
