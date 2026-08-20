@@ -20,7 +20,8 @@ config :chess_duel_backend, ChessDuelBackendWeb.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: 4000],
   check_origin: false,
   debug_errors: true,
-  secret_key_base: "dZ0K1n2g3o4k5s6e7g8r9e0t1k2e3y4b5a6s7e8d9e0v1o2n3l4y5d6o7n8o9t0u1s2e3i4n5p6r7o8d"
+  secret_key_base:
+    "dZ0K1n2g3o4k5s6e7g8r9e0t1k2e3y4b5a6s7e8d9e0v1o2n3l4y5d6o7n8o9t0u1s2e3i4n5p6r7o8d"
 
 # Set a higher stacktrace during development.
 config :logger, :console, format: "[$level] $message\n"

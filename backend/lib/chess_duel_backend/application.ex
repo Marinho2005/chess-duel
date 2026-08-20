@@ -9,6 +9,9 @@ defmodule ChessDuelBackend.Application do
       [
         ChessDuelBackend.Repo,
         {Phoenix.PubSub, name: ChessDuelBackend.PubSub},
+        ChessDuelBackend.ChessValidator,
+        {Registry, keys: :unique, name: ChessDuelBackend.GameRegistry},
+        {DynamicSupervisor, name: ChessDuelBackend.GameSupervisor, strategy: :one_for_one},
         redix_child_spec(),
         ChessDuelBackendWeb.Endpoint
       ]
@@ -30,8 +33,12 @@ defmodule ChessDuelBackend.Application do
         base = [host: uri.host, port: uri.port]
 
         case uri.userinfo do
-          nil -> base
-          "" -> base
+          nil ->
+            base
+
+          "" ->
+            base
+
           userinfo ->
             # Redix nao usa username; se houver "user:pass" ou so ":pass",
             # extraimos apenas a senha.

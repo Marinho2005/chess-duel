@@ -10,5 +10,4 @@ defmodule ChessDuelBackendWeb.Router do
 
     get "/health", HealthController, :index
   end
-
 end

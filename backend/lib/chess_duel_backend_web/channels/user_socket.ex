@@ -2,10 +2,12 @@ defmodule ChessDuelBackendWeb.UserSocket do
   use Phoenix.Socket
 
   channel "games:*", ChessDuelBackendWeb.GamesChannel
+  channel "game:*", ChessDuelBackendWeb.GameChannel
 
   @impl true
-  def connect(_params, socket, _connect_info) do
-    {:ok, socket}
+  def connect(params, socket, _connect_info) do
+    player_id = Map.get(params, "player_id", "anonymous")
+    {:ok, assign(socket, :player_id, player_id)}
   end
 
   @impl true
