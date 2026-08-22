@@ -55,6 +55,12 @@ defmodule ChessDuelBackend.Games.GameServer do
     end
   end
 
+  def reserve_players(game_id, white_player_id, black_player_id) do
+    with {:ok, pid} <- start_or_get(game_id) do
+      GenServer.call(pid, {:reserve_players, white_player_id, black_player_id})
+    end
+  end
+
   def player_disconnected(game_id, player_id) do
     with {:ok, pid} <- start_or_get(game_id) do
       GenServer.cast(pid, {:player_disconnected, player_id})
@@ -133,6 +139,28 @@ defmodule ChessDuelBackend.Games.GameServer do
   end
 
   @impl true
+  def handle_call(
+        {:reserve_players, white_player_id, black_player_id},
+        _from,
+        %{white_player_id: nil, black_player_id: nil, moves: []} = state
+      ) do
+    state = %{state | white_player_id: white_player_id, black_player_id: black_player_id}
+    persist_state(state)
+    {:reply, {:ok, snapshot_clock(state)}, state}
+  end
+
+  def handle_call(
+        {:reserve_players, white_player_id, black_player_id},
+        _from,
+        %{white_player_id: white_player_id, black_player_id: black_player_id} = state
+      ) do
+    {:reply, {:ok, snapshot_clock(state)}, state}
+  end
+
+  def handle_call({:reserve_players, _white_player_id, _black_player_id}, _from, state) do
+    {:reply, {:error, :game_full}, state}
+  end
+
   def handle_call(
         {:make_move, _from, _to, _player, _promotion},
         _caller,

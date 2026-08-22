@@ -1,11 +1,12 @@
 defmodule ChessDuelBackendWeb.GameChannel do
   use ChessDuelBackendWeb, :channel
 
+  alias ChessDuelBackend.Accounts
   alias ChessDuelBackend.Games.GameServer
 
   @impl true
   def join("game:" <> game_id, _payload, socket) do
-    player_id = socket.assigns.player_id
+    player_id = socket.assigns.user_id
 
     with {:ok, %{color: color, state: state}} <- GameServer.player_connected(game_id, player_id) do
       socket =
@@ -23,7 +24,7 @@ defmodule ChessDuelBackendWeb.GameChannel do
   @impl true
   def terminate(_reason, socket) do
     if game_id = socket.assigns[:game_id] do
-      GameServer.player_disconnected(game_id, socket.assigns.player_id)
+      GameServer.player_disconnected(game_id, socket.assigns.user_id)
     end
 
     :ok
@@ -32,7 +33,7 @@ defmodule ChessDuelBackendWeb.GameChannel do
   @impl true
   def handle_in("move", %{"from" => from, "to" => to} = payload, socket) do
     game_id = socket.assigns.game_id
-    player = socket.assigns.player_id
+    player = socket.assigns.user_id
     promotion = Map.get(payload, "promotion")
 
     case GameServer.make_move(game_id, from, to, player, promotion) do
@@ -87,6 +88,8 @@ defmodule ChessDuelBackendWeb.GameChannel do
       player_color: player_color,
       white_player_id: state.white_player_id,
       black_player_id: state.black_player_id,
+      white_player: public_player(state.white_player_id),
+      black_player: public_player(state.black_player_id),
       is_check: state.is_check,
       is_checkmate: state.is_checkmate,
       is_stalemate: state.is_stalemate,
@@ -94,6 +97,17 @@ defmodule ChessDuelBackendWeb.GameChannel do
       white_time_remaining_ms: state.white_time_remaining_ms,
       black_time_remaining_ms: state.black_time_remaining_ms
     }
+  end
+
+  defp public_player(nil), do: nil
+
+  defp public_player(user_id) do
+    with {:ok, user_id} <- Ecto.UUID.cast(user_id),
+         user when not is_nil(user) <- Accounts.get_user(user_id) do
+      %{id: user.id, nickname: user.nickname, rating: user.rating}
+    else
+      _ -> nil
+    end
   end
 
   defp maybe_broadcast_game_over(socket, state, player) do
