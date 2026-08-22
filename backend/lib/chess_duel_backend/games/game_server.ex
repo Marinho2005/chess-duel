@@ -8,6 +8,7 @@ defmodule ChessDuelBackend.Games.GameServer do
   # Pode ser sobrescrito com config :chess_duel_backend, :game_clock_initial_ms
   # para testes manuais curtos. O padrao permanece 3 minutos por jogador.
   @default_initial_time_ms 180_000
+  @default_abandonment_grace_ms 60_000
 
   def start_link(game_id) do
     GenServer.start_link(__MODULE__, game_id, name: via_tuple(game_id))
@@ -45,6 +46,18 @@ defmodule ChessDuelBackend.Games.GameServer do
     end
   end
 
+  def player_connected(game_id, player_id) do
+    with {:ok, pid} <- start_or_get(game_id) do
+      GenServer.call(pid, {:player_connected, player_id})
+    end
+  end
+
+  def player_disconnected(game_id, player_id) do
+    with {:ok, pid} <- start_or_get(game_id) do
+      GenServer.cast(pid, {:player_disconnected, player_id})
+    end
+  end
+
   def get_state(game_id) do
     with {:ok, pid} <- start_or_get(game_id) do
       GenServer.call(pid, :get_state)
@@ -60,13 +73,27 @@ defmodule ChessDuelBackend.Games.GameServer do
         @default_initial_time_ms
       )
 
+    abandonment_grace_ms =
+      Application.get_env(
+        :chess_duel_backend,
+        :game_abandonment_grace_ms,
+        @default_abandonment_grace_ms
+      )
+
     {:ok,
      %{
        game_id: game_id,
+       white_player_id: nil,
+       black_player_id: nil,
+       connected_player_counts: %{},
+       abandonment_timer_refs: %{},
+       abandonment_grace_ms: abandonment_grace_ms,
        moves: [],
        current_turn: "white",
        fen: @initial_fen,
        status: "in_progress",
+       game_over_reason: nil,
+       winner_player_id: nil,
        is_check: false,
        is_checkmate: false,
        is_stalemate: false,
@@ -87,7 +114,60 @@ defmodule ChessDuelBackend.Games.GameServer do
     {:reply, {:error, :game_finished}, state}
   end
 
-  def handle_call({:make_move, from, to, player, promotion}, _from, state) do
+  def handle_call({:make_move, from, to, player, promotion}, _caller, state) do
+    case player_color(state, player) do
+      nil ->
+        {:reply, {:error, :not_a_player}, state}
+
+      color when color != state.current_turn ->
+        {:reply, {:error, :not_your_turn}, state}
+
+      _color ->
+        validate_and_apply_move(from, to, player, promotion, state)
+    end
+  end
+
+  def handle_call({:player_connected, player_id}, _from, %{status: "finished"} = state) do
+    {:reply, {:ok, %{color: player_color(state, player_id), state: snapshot_clock(state)}}, state}
+  end
+
+  def handle_call({:player_connected, player_id}, _from, state) do
+    case player_color(state, player_id) || next_open_color(state) do
+      nil ->
+        {:reply, {:error, :game_full}, state}
+
+      color ->
+        state =
+          state
+          |> assign_player_if_needed(color, player_id)
+          |> increment_connection(player_id)
+          |> cancel_abandonment_timer(color)
+
+        {:reply, {:ok, %{color: color, state: snapshot_clock(state)}}, state}
+    end
+  end
+
+  def handle_call(:get_state, _from, state) do
+    {:reply, {:ok, snapshot_clock(state)}, state}
+  end
+
+  @impl true
+  def handle_cast({:player_disconnected, _player_id}, %{status: "finished"} = state) do
+    {:noreply, state}
+  end
+
+  def handle_cast({:player_disconnected, player_id}, state) do
+    color = player_color(state, player_id)
+
+    state =
+      state
+      |> decrement_connection(player_id)
+      |> maybe_schedule_abandonment(color)
+
+    {:noreply, state}
+  end
+
+  defp validate_and_apply_move(from, to, player, promotion, state) do
     case ChessValidator.validate_move(state.fen, from, to, promotion) do
       {:ok, result} ->
         now = System.monotonic_time(:millisecond)
@@ -108,6 +188,7 @@ defmodule ChessDuelBackend.Games.GameServer do
 
             next_turn = opposite_color(state.current_turn)
             finished = result.is_checkmate or result.is_stalemate or result.is_draw
+            winner_player_id = if result.is_checkmate, do: player
 
             cancel_clock_timer(clock_state.clock_timer_ref)
 
@@ -118,6 +199,8 @@ defmodule ChessDuelBackend.Games.GameServer do
                 current_turn: next_turn,
                 fen: result.new_fen,
                 status: if(finished, do: "finished", else: "in_progress"),
+                game_over_reason: game_over_reason(result),
+                winner_player_id: winner_player_id,
                 is_check: result.is_check,
                 is_checkmate: result.is_checkmate,
                 is_stalemate: result.is_stalemate,
@@ -135,12 +218,16 @@ defmodule ChessDuelBackend.Games.GameServer do
     end
   end
 
-  def handle_call(:get_state, _from, state) do
-    {:reply, {:ok, snapshot_clock(state)}, state}
-  end
-
   @impl true
   def handle_info(:time_expired, %{status: "finished"} = state), do: {:noreply, state}
+
+  def handle_info({:abandonment_expired, _color}, %{status: "finished"} = state) do
+    {:noreply, state}
+  end
+
+  def handle_info({:abandonment_expired, color}, state) do
+    {:noreply, finish_by_abandonment(state, color)}
+  end
 
   def handle_info(:time_expired, state) do
     now = System.monotonic_time(:millisecond)
@@ -191,6 +278,48 @@ defmodule ChessDuelBackend.Games.GameServer do
     cancel_clock_timer(state.clock_timer_ref)
     winner = opposite_color(state.current_turn)
 
+    winner_player_id = player_id_for_color(state, winner)
+    broadcast_game_over(state, "timeout", winner_player_id)
+
+    finish_state(state, "timeout", winner_player_id)
+  end
+
+  defp finish_by_abandonment(state, abandoned_color) do
+    winner_player_id =
+      abandoned_color
+      |> opposite_color()
+      |> then(fn color ->
+        player_id = player_id_for_color(state, color)
+
+        if connected_count(state, player_id) > 0 do
+          player_id
+        end
+      end)
+
+    broadcast_game_over(state, "abandonment", winner_player_id)
+
+    finish_state(state, "abandonment", winner_player_id)
+  end
+
+  defp finish_state(state, reason, winner_player_id) do
+    cancel_clock_timer(state.clock_timer_ref)
+
+    Enum.each(state.abandonment_timer_refs, fn {_color, timer_ref} ->
+      Process.cancel_timer(timer_ref)
+    end)
+
+    %{
+      state
+      | status: "finished",
+        game_over_reason: reason,
+        winner_player_id: winner_player_id,
+        clock_timer_ref: nil,
+        turn_started_at: nil,
+        abandonment_timer_refs: %{}
+    }
+  end
+
+  defp broadcast_game_over(state, reason, winner_player_id) do
     topic = "game:#{state.game_id}"
 
     Phoenix.PubSub.broadcast(
@@ -199,11 +328,9 @@ defmodule ChessDuelBackend.Games.GameServer do
       %Phoenix.Socket.Broadcast{
         topic: topic,
         event: "game_over",
-        payload: %{reason: "timeout", winner: winner}
+        payload: %{reason: reason, winner_player_id: winner_player_id}
       }
     )
-
-    %{state | status: "finished", clock_timer_ref: nil, turn_started_at: nil}
   end
 
   defp time_key("white"), do: :white_time_remaining_ms
@@ -211,6 +338,79 @@ defmodule ChessDuelBackend.Games.GameServer do
 
   defp opposite_color("white"), do: "black"
   defp opposite_color("black"), do: "white"
+
+  defp game_over_reason(%{is_checkmate: true}), do: "checkmate"
+  defp game_over_reason(%{is_stalemate: true}), do: "stalemate"
+  defp game_over_reason(%{is_draw: true}), do: "draw"
+  defp game_over_reason(_result), do: nil
+
+  defp next_open_color(%{white_player_id: nil}), do: "white"
+  defp next_open_color(%{black_player_id: nil}), do: "black"
+  defp next_open_color(_state), do: nil
+
+  defp player_color(%{white_player_id: player_id}, player_id) when is_binary(player_id), do: "white"
+  defp player_color(%{black_player_id: player_id}, player_id) when is_binary(player_id), do: "black"
+  defp player_color(_state, _player_id), do: nil
+
+  defp player_id_for_color(state, "white"), do: state.white_player_id
+  defp player_id_for_color(state, "black"), do: state.black_player_id
+
+  defp assign_player_if_needed(%{white_player_id: nil} = state, "white", player_id) do
+    %{state | white_player_id: player_id}
+  end
+
+  defp assign_player_if_needed(%{black_player_id: nil} = state, "black", player_id) do
+    %{state | black_player_id: player_id}
+  end
+
+  defp assign_player_if_needed(state, _color, _player_id), do: state
+
+  defp increment_connection(state, player_id) do
+    update_in(state.connected_player_counts, fn counts ->
+      Map.update(counts, player_id, 1, &(&1 + 1))
+    end)
+  end
+
+  defp decrement_connection(state, player_id) do
+    update_in(state.connected_player_counts, fn counts ->
+      Map.update(counts, player_id, 0, &max(&1 - 1, 0))
+    end)
+  end
+
+  defp connected_count(_state, nil), do: 0
+  defp connected_count(state, player_id), do: Map.get(state.connected_player_counts, player_id, 0)
+
+  defp maybe_schedule_abandonment(state, nil), do: state
+
+  defp maybe_schedule_abandonment(state, color) do
+    player_id = player_id_for_color(state, color)
+
+    cond do
+      connected_count(state, player_id) > 0 ->
+        state
+
+      Map.has_key?(state.abandonment_timer_refs, color) ->
+        state
+
+      true ->
+        # O Channel notifica saida explicitamente; o GenServer centraliza a janela de reconexao.
+        timer_ref =
+          Process.send_after(self(), {:abandonment_expired, color}, state.abandonment_grace_ms)
+
+        put_in(state.abandonment_timer_refs[color], timer_ref)
+    end
+  end
+
+  defp cancel_abandonment_timer(state, color) do
+    case Map.pop(state.abandonment_timer_refs, color) do
+      {nil, _refs} ->
+        state
+
+      {timer_ref, refs} ->
+        Process.cancel_timer(timer_ref)
+        %{state | abandonment_timer_refs: refs}
+    end
+  end
 
   defp via_tuple(game_id), do: {:via, Registry, {GameRegistry, game_id}}
 end

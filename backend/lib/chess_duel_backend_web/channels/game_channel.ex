@@ -5,13 +5,28 @@ defmodule ChessDuelBackendWeb.GameChannel do
 
   @impl true
   def join("game:" <> game_id, _payload, socket) do
-    with {:ok, _pid} <- GameServer.start_or_get(game_id),
-         {:ok, state} <- GameServer.get_state(game_id) do
-      socket = assign(socket, :game_id, game_id)
-      {:ok, public_state(state), socket}
+    player_id = socket.assigns.player_id
+
+    with {:ok, %{color: color, state: state}} <- GameServer.player_connected(game_id, player_id) do
+      socket =
+        socket
+        |> assign(:game_id, game_id)
+        |> assign(:player_color, color)
+
+      {:ok, public_state(state, color), socket}
     else
+      {:error, :game_full} -> {:error, %{reason: "game_full"}}
       {:error, reason} -> {:error, %{reason: inspect(reason)}}
     end
+  end
+
+  @impl true
+  def terminate(_reason, socket) do
+    if game_id = socket.assigns[:game_id] do
+      GameServer.player_disconnected(game_id, socket.assigns.player_id)
+    end
+
+    :ok
   end
 
   @impl true
@@ -43,6 +58,15 @@ defmodule ChessDuelBackendWeb.GameChannel do
       {:error, :illegal_move} ->
         {:reply, {:error, %{reason: "illegal_move"}}, socket}
 
+      {:error, :not_your_turn} ->
+        {:reply, {:error, %{reason: "not_your_turn"}}, socket}
+
+      {:error, :not_a_player} ->
+        {:reply, {:error, %{reason: "not_a_player"}}, socket}
+
+      {:error, :game_finished} ->
+        {:reply, {:error, %{reason: "game_finished"}}, socket}
+
       {:error, reason} ->
         {:reply, {:error, %{reason: inspect(reason)}}, socket}
     end
@@ -52,12 +76,17 @@ defmodule ChessDuelBackendWeb.GameChannel do
     {:reply, {:error, %{reason: "from and to are required"}}, socket}
   end
 
-  defp public_state(state) do
+  defp public_state(state, player_color) do
     %{
       moves: state.moves,
       current_turn: state.current_turn,
       fen: state.fen,
       status: state.status,
+      game_over_reason: state.game_over_reason,
+      winner_player_id: state.winner_player_id,
+      player_color: player_color,
+      white_player_id: state.white_player_id,
+      black_player_id: state.black_player_id,
       is_check: state.is_check,
       is_checkmate: state.is_checkmate,
       is_stalemate: state.is_stalemate,
@@ -70,13 +99,13 @@ defmodule ChessDuelBackendWeb.GameChannel do
   defp maybe_broadcast_game_over(socket, state, player) do
     cond do
       state.is_checkmate ->
-        broadcast!(socket, "game_over", %{reason: "checkmate", winner: player})
+        broadcast!(socket, "game_over", %{reason: "checkmate", winner_player_id: player})
 
       state.is_stalemate ->
-        broadcast!(socket, "game_over", %{reason: "stalemate", winner: nil})
+        broadcast!(socket, "game_over", %{reason: "stalemate", winner_player_id: nil})
 
       state.is_draw ->
-        broadcast!(socket, "game_over", %{reason: "draw", winner: nil})
+        broadcast!(socket, "game_over", %{reason: "draw", winner_player_id: nil})
 
       true ->
         :ok
