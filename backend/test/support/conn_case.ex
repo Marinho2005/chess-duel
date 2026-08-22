@@ -1,0 +1,18 @@
+defmodule ChessDuelBackendWeb.ConnCase do
+  use ExUnit.CaseTemplate
+
+  using do
+    quote do
+      @endpoint ChessDuelBackendWeb.Endpoint
+
+      import Plug.Conn
+      import Phoenix.ConnTest
+    end
+  end
+
+  setup tags do
+    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(ChessDuelBackend.Repo, shared: not tags[:async])
+    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    {:ok, conn: Phoenix.ConnTest.build_conn()}
+  end
+end

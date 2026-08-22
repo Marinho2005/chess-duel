@@ -41,7 +41,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - **Construir em camadas pequenas e testáveis**: cada etapa prova um mecanismo isolado antes de combinar com o próximo.
 - **Evitar engenharia prematura**: não adicionar ferramentas de infraestrutura (Traefik, Sentry, Prometheus, Docker completo para dev, etc) antes de haver necessidade real e comprovada. Priorizar o core do produto funcionando primeiro.
 - **Preferir bibliotecas maduras a reescrever do zero**, especialmente em domínios onde bugs sutis são fáceis de introduzir e difíceis de notar (ex: regras de xadrez).
-- **Autenticação real ainda não foi implementada** até a Fase 2 começar. Qualquer identificação de jogador até lá é uma solução temporária (ex: `player_id` gerado no cliente, persistido em `localStorage`) e deve ser tratada como tal no código, não como solução definitiva.
+- **Autenticação local foi implementada na Fase 2.1** com email/senha e bearer token revogável. A identidade das partidas vem do `user_id` autenticado; OAuth permanece reservado para a etapa 2.2.
 - **Escritas em banco nunca bloqueiam a experiência em tempo real** — qualquer persistência durante uma partida ao vivo deve ser assíncrona; o estado em memória do GenServer é sempre a fonte de verdade imediata para os jogadores.
 
 ---
@@ -57,11 +57,11 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - [x] **1.3 Relógio da partida** — Formato fixo de 3 minutos por jogador, sem incremento. Cálculo baseado em timestamp (servidor autoritativo). Contagem visual decrescente implementada no frontend (estimativa local, sempre realinhada pelo servidor).
 - [x] **1.4 Detecção de fim de jogo** — Xeque-mate, afogamento, empate e timeout disparam corretamente o evento de fim de jogo, com mensagem diferenciada para vencedor/perdedor.
 - [x] **1.5 Reconexão robusta** — Identidade estável do jogador (branco/preto) entre reconexões, via `player_id` persistido em `localStorage` no cliente de teste. Timeout de graça de 60 segundos antes de declarar abandono quando um jogador desconecta.
-- [~] **1.6 Persistência real no Postgres** — Salvar a partida no banco (lances, FEN, tempos, resultado) tanto durante o jogo (escrita assíncrona a cada lance) quanto ao final (resultado, motivo, timestamp de término). Opcionalmente, permitir recuperação de estado do GenServer a partir do banco em caso de restart do servidor.
+- [x] **1.6 Persistência real no Postgres** — Salvar a partida no banco (lances, FEN, tempos, resultado) tanto durante o jogo (escrita assíncrona a cada lance) quanto ao final (resultado, motivo, timestamp de término). Opcionalmente, permitir recuperação de estado do GenServer a partir do banco em caso de restart do servidor.
 
 ### Fase 2 — Contas e ranking
 
-- [ ] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes.
+- [x] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes.
 - [ ] **2.2 OAuth (login social)** — Login com Google/GitHub via Ueberauth, ligado à mesma tabela de usuários.
 - [ ] **2.3 Perfil de jogador** — Página pública: avatar, apelido, país, data de criação da conta.
 - [ ] **2.4 Sistema de rating** — Cálculo de ELO ou Glicko-2, atualizado ao fim de cada partida (usando os dados de `result`/`end_reason` já persistidos na Fase 1.6).

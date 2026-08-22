@@ -1,9 +1,12 @@
 import Config
 
+# Only in tests, remove the complexity from the password hashing algorithm
+config :bcrypt_elixir, :log_rounds, 1
+
 # Configure your database
 database_url =
   System.get_env("DATABASE_URL") ||
-    "ecto://postgres:postgres@localhost:5432/chess_duel_test#{System.get_env("MIX_TEST_PARTITION")}"
+    "ecto://#{System.get_env("DB_USER", "chess_duel")}:#{System.get_env("DB_PASSWORD", "chess_duel_password")}@#{System.get_env("DB_HOST", "localhost")}:#{System.get_env("DB_PORT", "5432")}/chess_duel_test#{System.get_env("MIX_TEST_PARTITION")}"
 
 config :chess_duel_backend, ChessDuelBackend.Repo,
   url: database_url,

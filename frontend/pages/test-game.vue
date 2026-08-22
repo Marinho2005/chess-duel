@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 
+definePageMeta({ alias: ['/game/:gameId'] })
+
+type Player = {
+  id: string
+  nickname: string
+  rating: number
+}
+
 type Move = {
   from: string
   to: string
@@ -11,6 +19,14 @@ type GameState = {
   moves: Move[]
   current_turn: string
   fen: string
+  status: string
+  game_over_reason: GameOver['reason'] | null
+  winner_player_id: string | null
+  player_color: 'white' | 'black' | null
+  white_player_id: string | null
+  black_player_id: string | null
+  white_player: Player | null
+  black_player: Player | null
   white_time_remaining_ms: number
   black_time_remaining_ms: number
 }
@@ -27,11 +43,15 @@ type MoveMade = Move & {
 }
 
 type GameOver = {
-  reason: 'checkmate' | 'stalemate' | 'draw' | 'timeout'
-  winner: string | null
+  reason: 'checkmate' | 'stalemate' | 'draw' | 'timeout' | 'abandonment'
+  winner_player_id: string | null
 }
 
-const gameId = 'test-game-1'
+const route = useRoute()
+const gameId = computed(() =>
+  typeof route.params.gameId === 'string' ? route.params.gameId : 'test-game-1'
+)
+const auth = useAuthStore()
 const from = ref('')
 const to = ref('')
 const moves = ref<Move[]>([])
@@ -39,31 +59,67 @@ const currentTurn = ref('white')
 const fen = ref('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
 const whiteTimeRemainingMs = ref(180_000)
 const blackTimeRemainingMs = ref(180_000)
+const serverWhiteTimeRemainingMs = ref(180_000)
+const serverBlackTimeRemainingMs = ref(180_000)
+const clockReceivedAt = ref(Date.now())
+const gameStatus = ref('in_progress')
+const playerId = computed(() => auth.user?.id ?? '')
+const playerColor = ref<string | null>(null)
+const whitePlayer = ref<Player | null>(null)
+const blackPlayer = ref<Player | null>(null)
 const connectionStatus = ref('Conectando...')
 const errorMessage = ref('')
 const gameOverMessage = ref('')
 
 let socket: Socket | null = null
 let channel: Channel | null = null
+let clockInterval: ReturnType<typeof setInterval> | null = null
 
-onMounted(() => {
+onMounted(async () => {
+  auth.restoreSession()
+
+  if (!auth.token || !(await auth.fetchCurrentUser())) {
+    connectionStatus.value = 'Faca login para entrar na partida.'
+    return
+  }
+
   const backendUrl = useRuntimeConfig().public.api.baseURL
   const websocketUrl = `${backendUrl.replace(/^http/, 'ws').replace(/\/$/, '')}/socket`
-  const playerId = `player-${crypto.randomUUID().slice(0, 8)}`
 
-  socket = new Socket(websocketUrl, { params: { player_id: playerId } })
+  socket = new Socket(websocketUrl, { params: { token: auth.token } })
+  socket.onError(() => {
+    connectionStatus.value = 'Reconectando...'
+  })
+  socket.onClose(() => {
+    connectionStatus.value = 'Reconectando...'
+  })
   socket.connect()
 
-  channel = socket.channel(`game:${gameId}`, {})
+  channel = socket.channel(`game:${gameId.value}`, {})
   channel
     .join()
     .receive('ok', (state: GameState) => {
       moves.value = state.moves
       currentTurn.value = state.current_turn
       fen.value = state.fen
-      whiteTimeRemainingMs.value = state.white_time_remaining_ms
-      blackTimeRemainingMs.value = state.black_time_remaining_ms
-      connectionStatus.value = `Conectado como ${playerId}`
+      gameStatus.value = state.status
+      playerColor.value = state.player_color
+      whitePlayer.value = state.white_player
+      blackPlayer.value = state.black_player
+      syncClocks(state.white_time_remaining_ms, state.black_time_remaining_ms)
+      gameOverMessage.value = state.game_over_reason
+        ? formatGameOverMessage({
+            reason: state.game_over_reason,
+            winner_player_id: state.winner_player_id
+          })
+        : ''
+      connectionStatus.value = `Conectado como ${auth.user?.nickname}${formatPlayerColor(state.player_color)}`
+
+      if (state.status === 'finished') {
+        stopClockInterval()
+      } else {
+        startClockInterval()
+      }
     })
     .receive('error', (reason: unknown) => {
       connectionStatus.value = 'Falha ao entrar na partida'
@@ -74,29 +130,72 @@ onMounted(() => {
     moves.value.push({ from: move.from, to: move.to, player: move.player })
     currentTurn.value = move.current_turn
     fen.value = move.new_fen
-    whiteTimeRemainingMs.value = move.white_time_remaining_ms
-    blackTimeRemainingMs.value = move.black_time_remaining_ms
+    syncClocks(move.white_time_remaining_ms, move.black_time_remaining_ms)
     errorMessage.value = ''
   })
 
   channel.on('game_over', (result: GameOver) => {
-    if (result.reason === 'timeout') {
-      const winner = result.winner === 'white' ? 'brancas' : 'pretas'
-      gameOverMessage.value = `Fim de jogo por tempo esgotado. Vencedor: ${winner}`
-    } else if (result.reason === 'checkmate') {
-      gameOverMessage.value = `Xeque-mate! Vencedor: ${result.winner}`
-    } else if (result.reason === 'stalemate') {
-      gameOverMessage.value = 'Partida encerrada por afogamento.'
-    } else {
-      gameOverMessage.value = 'Partida encerrada em empate.'
-    }
+    updateDisplayedClocks()
+    gameStatus.value = 'finished'
+    stopClockInterval()
+    gameOverMessage.value = formatGameOverMessage(result)
   })
 })
 
 onBeforeUnmount(() => {
+  stopClockInterval()
   channel?.leave()
   socket?.disconnect()
 })
+
+function syncClocks(whiteTimeMs: number, blackTimeMs: number) {
+  serverWhiteTimeRemainingMs.value = whiteTimeMs
+  serverBlackTimeRemainingMs.value = blackTimeMs
+  clockReceivedAt.value = Date.now()
+  whiteTimeRemainingMs.value = whiteTimeMs
+  blackTimeRemainingMs.value = blackTimeMs
+}
+
+function updateDisplayedClocks() {
+  if (gameStatus.value === 'finished') {
+    return
+  }
+
+  const elapsedMs = Date.now() - clockReceivedAt.value
+
+  if (currentTurn.value === 'white') {
+    whiteTimeRemainingMs.value = Math.max(0, serverWhiteTimeRemainingMs.value - elapsedMs)
+    blackTimeRemainingMs.value = serverBlackTimeRemainingMs.value
+  } else {
+    whiteTimeRemainingMs.value = serverWhiteTimeRemainingMs.value
+    blackTimeRemainingMs.value = Math.max(0, serverBlackTimeRemainingMs.value - elapsedMs)
+  }
+}
+
+function startClockInterval() {
+  if (clockInterval) {
+    return
+  }
+
+  clockInterval = setInterval(updateDisplayedClocks, 250)
+}
+
+function stopClockInterval() {
+  if (!clockInterval) {
+    return
+  }
+
+  clearInterval(clockInterval)
+  clockInterval = null
+}
+
+function formatClock(timeMs: number) {
+  const totalSeconds = Math.ceil(Math.max(0, timeMs) / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
 
 function sendMove() {
   errorMessage.value = ''
@@ -113,19 +212,90 @@ function sendMove() {
       to.value = ''
     })
     .receive('error', (reason: { reason?: string }) => {
-      errorMessage.value = reason.reason === 'illegal_move' ? 'Lance ilegal' : JSON.stringify(reason)
+      const messages: Record<string, string> = {
+        illegal_move: 'Lance ilegal',
+        not_your_turn: 'Ainda nao e sua vez.',
+        not_a_player: 'Voce esta observando esta partida.',
+        game_finished: 'A partida ja terminou.'
+      }
+
+      errorMessage.value = reason.reason ? messages[reason.reason] || reason.reason : JSON.stringify(reason)
     })
+}
+
+function formatPlayerColor(color: string | null) {
+  if (color === 'white') {
+    return ' (brancas)'
+  }
+
+  if (color === 'black') {
+    return ' (pretas)'
+  }
+
+  return ''
+}
+
+function formatGameOverMessage(result: GameOver) {
+  if (result.winner_player_id === playerId.value) {
+    return `Voce venceu! ${formatGameOverReason(result.reason)}`
+  }
+
+  if (result.winner_player_id) {
+    return `Voce perdeu. ${formatGameOverReason(result.reason)}`
+  }
+
+  return `Empate. ${formatGameOverReason(result.reason)}`
+}
+
+function formatGameOverReason(reason: GameOver['reason']) {
+  const reasons: Record<GameOver['reason'], string> = {
+    checkmate: 'Fim de jogo por xeque-mate.',
+    stalemate: 'Partida encerrada por afogamento.',
+    draw: 'Partida encerrada em empate.',
+    timeout: 'Fim de jogo por tempo esgotado.',
+    abandonment: 'Fim de jogo por abandono.'
+  }
+
+  return reasons[reason]
+}
+
+function playerName(playerId: string) {
+  if (playerId === whitePlayer.value?.id) {
+    return whitePlayer.value.nickname
+  }
+
+  if (playerId === blackPlayer.value?.id) {
+    return blackPlayer.value.nickname
+  }
+
+  return playerId
 }
 </script>
 
 <template>
   <main class="container">
     <h1>Partida em tempo real</h1>
+    <NuxtLink to="/lobby" class="back-link">← Voltar ao salao</NuxtLink>
+    <p v-if="!auth.token"><NuxtLink to="/login">Entrar</NuxtLink> · <NuxtLink to="/register">Criar conta</NuxtLink></p>
     <p class="muted">Canal: <code>game:{{ gameId }}</code></p>
     <p>{{ connectionStatus }} · turno atual: <strong>{{ currentTurn }}</strong></p>
+    <p v-if="auth.user" class="muted">Usuario: <strong>{{ auth.user.nickname }}</strong> · rating {{ auth.user.rating }} · <code>{{ auth.user.id }}</code></p>
+    <div class="opponents">
+      <article :class="{ active: currentTurn === 'white' }">
+        <span>Brancas</span>
+        <strong>{{ whitePlayer?.nickname || 'Aguardando...' }}</strong>
+        <small v-if="whitePlayer">Rating {{ whitePlayer.rating }}</small>
+      </article>
+      <span class="versus">×</span>
+      <article :class="{ active: currentTurn === 'black' }">
+        <span>Pretas</span>
+        <strong>{{ blackPlayer?.nickname || 'Aguardando...' }}</strong>
+        <small v-if="blackPlayer">Rating {{ blackPlayer.rating }}</small>
+      </article>
+    </div>
     <div class="clocks">
-      <p>Brancas: <strong>{{ Math.ceil(whiteTimeRemainingMs / 1000) }}s</strong></p>
-      <p>Pretas: <strong>{{ Math.ceil(blackTimeRemainingMs / 1000) }}s</strong></p>
+      <p>Brancas: <strong>{{ formatClock(whiteTimeRemainingMs) }}</strong></p>
+      <p>Pretas: <strong>{{ formatClock(blackTimeRemainingMs) }}</strong></p>
     </div>
     <p class="fen"><strong>FEN:</strong> <code>{{ fen }}</code></p>
     <p v-if="gameOverMessage" class="game-over">{{ gameOverMessage }}</p>
@@ -150,7 +320,7 @@ function sendMove() {
       <ol v-else>
         <li v-for="(move, index) in moves" :key="index">
           <strong>{{ move.from }} → {{ move.to }}</strong>
-          <span class="muted"> por {{ move.player }}</span>
+          <span class="muted"> por {{ playerName(move.player) }}</span>
         </li>
       </ol>
     </section>
@@ -168,6 +338,12 @@ function sendMove() {
   font-family: system-ui, sans-serif;
 }
 .muted { color: #9aa0aa; }
+.back-link { color: #8ab4ff; }
+.opponents { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; margin: 1.5rem 0; }
+.opponents article { display: grid; gap: 0.25rem; padding: 1rem; background: #171a21; border: 1px solid #232835; border-radius: 12px; }
+.opponents article.active { border-color: #3769d4; box-shadow: 0 0 0 1px #3769d4; }
+.opponents span, .opponents small { color: #9aa0aa; }
+.versus { font-size: 1.5rem; }
 .clocks { display: flex; gap: 2rem; }
 .move-form {
   display: flex;
