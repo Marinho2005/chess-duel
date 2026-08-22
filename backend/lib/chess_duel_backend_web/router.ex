@@ -16,6 +16,7 @@ defmodule ChessDuelBackendWeb.Router do
     get "/health", HealthController, :index
     post "/users/register", UserRegistrationController, :create
     post "/users/log_in", UserSessionController, :create
+    get "/profiles/:nickname", UserController, :show
   end
 
   scope "/api", ChessDuelBackendWeb do
@@ -23,5 +24,7 @@ defmodule ChessDuelBackendWeb.Router do
 
     delete "/users/log_out", UserSessionController, :delete
     get "/users/me", UserController, :me
+    patch "/users/me", UserController, :update
+    post "/users/me/avatar", UserController, :update_avatar
   end
 end

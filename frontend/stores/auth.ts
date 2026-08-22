@@ -4,7 +4,10 @@ export type AuthUser = {
   id: string
   email: string
   nickname: string
+  country: string | null
+  avatar_url: string | null
   rating: number
+  inserted_at: string
 }
 
 type AuthResponse = {
@@ -97,6 +100,65 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function updateProfile(nickname: string, country: string) {
+    error.value = ''
+
+    if (!token.value) {
+      return false
+    }
+
+    try {
+      const response = await $fetch<{ user: AuthUser }>('/api/users/me', {
+        baseURL: config.public.api.baseURL,
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token.value}` },
+        body: { user: { nickname, country: country || null } }
+      })
+
+      user.value = response.user
+      return true
+    } catch (requestError) {
+      const status = (requestError as { status?: number; statusCode?: number }).statusCode
+        || (requestError as { status?: number }).status
+
+      if (status === 401) {
+        clearSession()
+      }
+
+      error.value = formatRequestError(requestError)
+      return false
+    }
+  }
+
+  async function updateAvatar(file: File) {
+    error.value = ''
+
+    if (!token.value) return false
+
+    const body = new FormData()
+    body.append('avatar', file)
+
+    try {
+      const response = await $fetch<{ user: AuthUser }>('/api/users/me/avatar', {
+        baseURL: config.public.api.baseURL,
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token.value}` },
+        body
+      })
+
+      user.value = response.user
+      return true
+    } catch (requestError) {
+      const data = (requestError as { data?: { error?: string } }).data
+      const messages: Record<string, string> = {
+        avatar_too_large: 'A imagem deve ter no maximo 2 MB.',
+        invalid_avatar_format: 'Escolha uma imagem JPEG, PNG ou WebP valida.'
+      }
+      error.value = messages[data?.error || ''] || 'Nao foi possivel enviar a foto.'
+      return false
+    }
+  }
+
   function clearSession() {
     token.value = null
     user.value = null
@@ -121,8 +183,8 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    return 'Nao foi possivel autenticar.'
+    return 'Nao foi possivel concluir a solicitacao.'
   }
 
-  return { token, user, error, restoreSession, register, logIn, fetchCurrentUser, logOut }
+  return { token, user, error, restoreSession, register, logIn, fetchCurrentUser, updateProfile, updateAvatar, logOut }
 })

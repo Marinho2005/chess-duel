@@ -61,6 +61,10 @@ defmodule ChessDuelBackend.Accounts do
   def get_user!(id), do: Repo.get!(User, id)
   def get_user(id), do: Repo.get(User, id)
 
+  def get_user_by_nickname(nickname) when is_binary(nickname) do
+    Repo.get_by(User, nickname: nickname)
+  end
+
   ## User registration
 
   @doc """
@@ -82,6 +86,18 @@ defmodule ChessDuelBackend.Accounts do
   end
 
   ## Settings
+
+  def update_user_profile(%User{} = user, attrs) do
+    user
+    |> User.profile_changeset(attrs)
+    |> Repo.update()
+  end
+
+  def update_user_avatar(%User{} = user, avatar_path) when is_binary(avatar_path) do
+    user
+    |> User.avatar_changeset(avatar_path)
+    |> Repo.update()
+  end
 
   @doc """
   Checks whether the user is in sudo mode.

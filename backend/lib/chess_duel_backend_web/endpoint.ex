@@ -17,6 +17,11 @@ defmodule ChessDuelBackendWeb.Endpoint do
     websocket: true,
     longpoll: false
 
+  plug Plug.Static,
+    at: "/uploads",
+    from: {:chess_duel_backend, "priv/static/uploads"},
+    gzip: false
+
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 

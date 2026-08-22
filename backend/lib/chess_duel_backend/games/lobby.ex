@@ -22,7 +22,12 @@ defmodule ChessDuelBackend.Games.Lobby do
 
   @impl true
   def handle_call({:connect, user}, _from, state) do
-    user_data = %{id: user.id, nickname: user.nickname, rating: user.rating}
+    user_data = %{
+      id: user.id,
+      nickname: user.nickname,
+      rating: user.rating,
+      avatar_url: user.avatar_path
+    }
 
     users =
       Map.update(state.users, user.id, Map.put(user_data, :connections, 1), fn current ->
@@ -142,5 +147,5 @@ defmodule ChessDuelBackend.Games.Lobby do
     }
   end
 
-  defp public_user(user), do: Map.take(user, [:id, :nickname, :rating])
+  defp public_user(user), do: Map.take(user, [:id, :nickname, :rating, :avatar_url])
 end

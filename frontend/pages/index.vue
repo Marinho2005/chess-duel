@@ -1,10 +1,12 @@
 <script setup lang="ts">
 const auth = useAuthStore()
+const route = useRoute()
 const mode = ref<'login' | 'register'>('login')
 const nickname = ref('')
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
+const sessionExpired = computed(() => route.query.session === 'expired')
 
 onMounted(async () => {
   auth.restoreSession()
@@ -38,6 +40,7 @@ async function submit() {
     </section>
 
     <form class="auth-card" @submit.prevent="submit">
+      <p v-if="sessionExpired" class="session-message">Sua sessão expirou. Entre novamente para continuar.</p>
       <div class="tabs" role="tablist">
         <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'">Entrar</button>
         <button type="button" :class="{ active: mode === 'register' }" @click="mode = 'register'">Criar conta</button>
@@ -98,5 +101,6 @@ button { cursor: pointer; }
 .primary:disabled { opacity: 0.65; cursor: wait; }
 .hint { margin: -0.4rem 0 0; color: #8b7664; font-size: 0.82rem; }
 .error { margin: 0; color: #b33e2e; text-align: center; }
+.session-message { margin: 0; padding: 0.8rem; color: #74472e; text-align: center; background: #efe2ce; border-radius: 10px; }
 .tagline { max-width: 520px; margin: 0; color: #806d5d; text-align: center; }
 </style>
