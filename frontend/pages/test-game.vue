@@ -47,6 +47,12 @@ type GameOver = {
   winner_player_id: string | null
 }
 
+type RatingUpdate = {
+  game_id: string
+  white: { id: string; before: number; after: number }
+  black: { id: string; before: number; after: number }
+}
+
 const route = useRoute()
 const gameId = computed(() =>
   typeof route.params.gameId === 'string' ? route.params.gameId : 'test-game-1'
@@ -70,6 +76,7 @@ const blackPlayer = ref<Player | null>(null)
 const connectionStatus = ref('Conectando...')
 const errorMessage = ref('')
 const gameOverMessage = ref('')
+const ratingMessage = ref('')
 
 let socket: Socket | null = null
 let channel: Channel | null = null
@@ -140,6 +147,16 @@ onMounted(async () => {
     stopClockInterval()
     gameOverMessage.value = formatGameOverMessage(result)
   })
+
+  channel.on('rating_updated', async (rating: RatingUpdate) => {
+    applyPlayerRating(rating.white)
+    applyPlayerRating(rating.black)
+
+    const ownRating = rating.white.id === playerId.value ? rating.white : rating.black
+    const change = ownRating.after - ownRating.before
+    ratingMessage.value = `Rating: ${ownRating.before} → ${ownRating.after} (${change >= 0 ? '+' : ''}${change})`
+    await auth.fetchCurrentUser()
+  })
 })
 
 onBeforeUnmount(() => {
@@ -178,6 +195,11 @@ function startClockInterval() {
   }
 
   clockInterval = setInterval(updateDisplayedClocks, 250)
+}
+
+function applyPlayerRating(update: RatingUpdate['white']) {
+  if (whitePlayer.value?.id === update.id) whitePlayer.value.rating = update.after
+  if (blackPlayer.value?.id === update.id) blackPlayer.value.rating = update.after
 }
 
 function stopClockInterval() {
@@ -301,6 +323,7 @@ function playerName(playerId: string) {
     </div>
     <p class="fen"><strong>FEN:</strong> <code>{{ fen }}</code></p>
     <p v-if="gameOverMessage" class="game-over">{{ gameOverMessage }}</p>
+    <p v-if="ratingMessage" class="rating-update">{{ ratingMessage }}</p>
 
     <form class="move-form" @submit.prevent="sendMove">
       <label>
@@ -375,6 +398,7 @@ li { margin: 0.6rem 0; }
   background: #2855b6;
   border-radius: 8px;
 }
+.rating-update { padding: 0.85rem 1rem; color: #dcebcf; background: #24351f; border: 1px solid #527347; border-radius: 8px; }
 @media (max-width: 560px) {
   .move-form { align-items: stretch; flex-direction: column; }
 }

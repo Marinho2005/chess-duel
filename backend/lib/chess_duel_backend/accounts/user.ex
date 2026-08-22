@@ -40,6 +40,11 @@ defmodule ChessDuelBackend.Accounts.User do
     change(user, avatar_path: avatar_path)
   end
 
+  @doc false
+  def rating_changeset(user, rating) when is_integer(rating) do
+    change(user, rating: rating)
+  end
+
   @doc """
   A user changeset for registering or changing the email.
 

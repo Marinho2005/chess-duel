@@ -67,7 +67,7 @@ function memberSince(date: string) {
 
       <div class="stats">
         <article><strong>{{ profile.rating }}</strong><span>Rating atual</span></article>
-        <article><strong>Provisório</strong><span>Categoria</span></article>
+        <article><strong>ELO</strong><span>Sistema competitivo</span></article>
       </div>
 
       <p class="member">Membro desde {{ memberSince(profile.inserted_at) }}</p>

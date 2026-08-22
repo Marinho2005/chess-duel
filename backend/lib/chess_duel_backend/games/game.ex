@@ -19,6 +19,13 @@ defmodule ChessDuelBackend.Games.Game do
     field :white_time_remaining_ms, :integer
     field :black_time_remaining_ms, :integer
     field :finished_at, :utc_datetime
+    field :rated_at, :utc_datetime
+    field :white_rating_before, :integer
+    field :white_rating_after, :integer
+    field :black_rating_before, :integer
+    field :black_rating_after, :integer
+
+    has_many :rating_changes, ChessDuelBackend.Ratings.RatingChange
 
     timestamps(type: :utc_datetime)
   end
@@ -46,5 +53,23 @@ defmodule ChessDuelBackend.Games.Game do
     |> validate_inclusion(:result, ~w(white_wins black_wins draw abandoned))
     |> validate_inclusion(:end_reason, ~w(checkmate timeout stalemate draw abandonment))
     |> unique_constraint(:game_id)
+  end
+
+  def rating_changeset(game, attrs) do
+    game
+    |> cast(attrs, [
+      :rated_at,
+      :white_rating_before,
+      :white_rating_after,
+      :black_rating_before,
+      :black_rating_after
+    ])
+    |> validate_required([
+      :rated_at,
+      :white_rating_before,
+      :white_rating_after,
+      :black_rating_before,
+      :black_rating_after
+    ])
   end
 end
