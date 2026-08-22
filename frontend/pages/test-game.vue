@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 
-definePageMeta({ alias: ['/game/:gameId'], middleware: 'auth' })
+definePageMeta({ middleware: 'auth' })
 
 type Player = {
   id: string

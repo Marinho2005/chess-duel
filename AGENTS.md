@@ -95,7 +95,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 
 ### Fora do roadmap numerado, mas necessária em algum momento
 
-- [ ] **UI real de jogo** — Substituir `test-game.vue` por uma interface com tabuleiro visual (chessground), premove, e design próprio (Tailwind CSS, sem framework de componente tipo Vuetify/Bootstrap, para manter identidade visual própria do produto)
+- [x] **UI real de jogo** — Rota `/game/:gameId` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; `test-game.vue` preservada apenas para diagnóstico.
 - [ ] **Dockerização completa** — Hoje o `docker-compose.yml` só sobe Postgres e Valkey; backend e frontend rodam localmente via `mix phx.server`/`npm run dev`. Dockerizar tudo faz sentido perto do momento de deploy, ou para padronizar o ambiente entre os dois desenvolvedores do projeto.
 
 ---
