@@ -42,6 +42,7 @@ defmodule ChessDuelBackendWeb.GameChannel do
           from: from,
           to: to,
           player: player,
+          promotion: promotion,
           new_fen: state.fen,
           current_turn: state.current_turn,
           is_check: state.is_check,

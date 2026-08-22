@@ -4,6 +4,12 @@ export default defineNuxtConfig({
 
   modules: ['@pinia/nuxt'],
 
+  css: [
+    '@lichess-org/chessground/assets/chessground.base.css',
+    '@lichess-org/chessground/assets/chessground.brown.css',
+    '@lichess-org/chessground/assets/chessground.cburnett.css',
+  ],
+
   typescript: {
     strict: true,
     typeCheck: false,
