@@ -104,7 +104,7 @@ defmodule ChessDuelBackendWeb.GameChannel do
   defp public_player(user_id) do
     with {:ok, user_id} <- Ecto.UUID.cast(user_id),
          user when not is_nil(user) <- Accounts.get_user(user_id) do
-      %{id: user.id, nickname: user.nickname, rating: user.rating}
+      %{id: user.id, nickname: user.nickname, rating: user.rating, avatar_url: user.avatar_path}
     else
       _ -> nil
     end

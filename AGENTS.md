@@ -63,7 +63,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 
 - [x] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes.
 - [ ] **2.2 OAuth (login social)** — Login com Google/GitHub via Ueberauth, ligado à mesma tabela de usuários.
-- [ ] **2.3 Perfil de jogador** — Página pública: avatar, apelido, país, data de criação da conta.
+- [x] **2.3 Perfil de jogador** — Página pública com foto de perfil (inicial como fallback), apelido, país, rating e data de criação; edição autenticada do próprio perfil e proteção das rotas privadas.
 - [ ] **2.4 Sistema de rating** — Cálculo de ELO ou Glicko-2, atualizado ao fim de cada partida (usando os dados de `result`/`end_reason` já persistidos na Fase 1.6).
 - [ ] **2.5 Histórico de partidas** — Lista de partidas jogadas por usuário, com resultado e data, usando a tabela `games` já persistida desde a Fase 1.6.
 

@@ -1,6 +1,8 @@
 defmodule ChessDuelBackendWeb.AuthApiTest do
   use ChessDuelBackendWeb.ConnCase, async: true
 
+  alias ChessDuelBackend.Accounts.AvatarStorage
+
   test "cadastro, me e logout usam bearer token revogavel", %{conn: conn} do
     register_conn =
       post(conn, "/api/users/register", %{
@@ -55,5 +57,111 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
 
   test "me exige autenticacao", %{conn: conn} do
     assert %{"error" => "authentication_required"} = json_response(get(conn, "/api/users/me"), 401)
+  end
+
+  test "perfil publico nao expoe email e somente o dono pode editar", %{conn: conn} do
+    attrs = %{
+      "email" => "public@example.com",
+      "nickname" => "public_player",
+      "password" => "password1234"
+    }
+
+    %{"token" => token} =
+      conn
+      |> post("/api/users/register", %{"user" => attrs})
+      |> json_response(201)
+
+    %{"profile" => profile} =
+      build_conn()
+      |> get("/api/profiles/public_player")
+      |> json_response(200)
+
+    assert profile["nickname"] == "public_player"
+    assert profile["rating"] == 1200
+    assert profile["inserted_at"]
+    refute Map.has_key?(profile, "email")
+
+    assert %{"error" => "authentication_required"} =
+             build_conn()
+             |> patch("/api/users/me", %{"user" => %{"nickname" => "intruder"}})
+             |> json_response(401)
+
+    authenticated_conn = put_req_header(build_conn(), "authorization", "Bearer #{token}")
+
+    %{"user" => updated_user} =
+      authenticated_conn
+      |> patch("/api/users/me", %{
+        "user" => %{"nickname" => "updated_player", "country" => "Brasil"}
+      })
+      |> json_response(200)
+
+    assert updated_user["nickname"] == "updated_player"
+    assert updated_user["country"] == "Brasil"
+    assert updated_user["rating"] == 1200
+  end
+
+  test "usuario autenticado envia avatar valido e ele aparece no perfil publico", %{conn: conn} do
+    attrs = %{
+      "email" => "avatar@example.com",
+      "nickname" => "avatar_player",
+      "password" => "password1234"
+    }
+
+    %{"token" => token} =
+      conn
+      |> post("/api/users/register", %{"user" => attrs})
+      |> json_response(201)
+
+    temporary_path = Path.join(System.tmp_dir!(), "avatar-#{Ecto.UUID.generate()}.png")
+    File.write!(temporary_path, <<0x89, "PNG\r\n", 0x1A, "\n", "test-image">>)
+    on_exit(fn -> File.rm(temporary_path) end)
+
+    upload = %Plug.Upload{
+      path: temporary_path,
+      filename: "avatar.png",
+      content_type: "image/png"
+    }
+
+    authenticated_conn = put_req_header(build_conn(), "authorization", "Bearer #{token}")
+
+    %{"user" => user} =
+      authenticated_conn
+      |> post("/api/users/me/avatar", %{"avatar" => upload})
+      |> json_response(200)
+
+    assert String.starts_with?(user["avatar_url"], "/uploads/avatars/")
+    on_exit(fn -> AvatarStorage.delete(user["avatar_url"]) end)
+
+    %{"profile" => profile} =
+      build_conn()
+      |> get("/api/profiles/avatar_player")
+      |> json_response(200)
+
+    assert profile["avatar_url"] == user["avatar_url"]
+  end
+
+  test "upload de avatar rejeita arquivo que nao e imagem", %{conn: conn} do
+    attrs = %{
+      "email" => "invalid-avatar@example.com",
+      "nickname" => "invalid_avatar",
+      "password" => "password1234"
+    }
+
+    %{"token" => token} =
+      conn
+      |> post("/api/users/register", %{"user" => attrs})
+      |> json_response(201)
+
+    temporary_path = Path.join(System.tmp_dir!(), "avatar-#{Ecto.UUID.generate()}.txt")
+    File.write!(temporary_path, "isto nao e uma imagem")
+    on_exit(fn -> File.rm(temporary_path) end)
+
+    upload = %Plug.Upload{path: temporary_path, filename: "fake.png", content_type: "image/png"}
+    authenticated_conn = put_req_header(build_conn(), "authorization", "Bearer #{token}")
+
+    assert %{"error" => "invalid_avatar_format"} =
+             authenticated_conn
+             |> post("/api/users/me/avatar", %{"avatar" => upload})
+             |> json_response(422)
   end
 end

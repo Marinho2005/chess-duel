@@ -7,6 +7,8 @@ defmodule ChessDuelBackend.Accounts.User do
   schema "users" do
     field :email, :string
     field :nickname, :string
+    field :country, :string
+    field :avatar_path, :string
     field :rating, :integer, default: 1200
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
@@ -24,6 +26,18 @@ defmodule ChessDuelBackend.Accounts.User do
     |> validate_nickname(opts)
     |> validate_confirmation(:password, message: "does not match password")
     |> validate_password(opts)
+  end
+
+  @doc "Changeset dos dados publicos editaveis do perfil."
+  def profile_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [:nickname, :country])
+    |> validate_nickname(opts)
+    |> validate_length(:country, max: 56)
+  end
+
+  def avatar_changeset(user, avatar_path) do
+    change(user, avatar_path: avatar_path)
   end
 
   @doc """

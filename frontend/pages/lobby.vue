@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 
-type LobbyUser = { id: string; nickname: string; rating: number }
+definePageMeta({ middleware: 'auth' })
+
+type LobbyUser = { id: string; nickname: string; rating: number; avatar_url: string | null }
 type Challenge = { id: string; challenger: LobbyUser; challenged: LobbyUser }
 type LobbyState = { users: LobbyUser[]; challenges: Challenge[] }
 type AcceptedGame = { game_id: string; white_player: LobbyUser; black_player: LobbyUser }
@@ -11,6 +13,7 @@ const users = ref<LobbyUser[]>([])
 const challenges = ref<Challenge[]>([])
 const status = ref('Conectando ao salao...')
 const errorMessage = ref('')
+const config = useRuntimeConfig()
 
 let socket: Socket | null = null
 let channel: Channel | null = null
@@ -87,6 +90,12 @@ function challengeSentTo(userId: string) {
   return sentChallenges.value.some(item => item.challenged.id === userId)
 }
 
+function avatarUrl(user: LobbyUser | null | undefined) {
+  return user?.avatar_url
+    ? `${config.public.api.baseURL.replace(/\/$/, '')}${user.avatar_url}`
+    : null
+}
+
 async function logOut() {
   channel?.leave()
   socket?.disconnect()
@@ -102,6 +111,7 @@ async function logOut() {
       <nav>
         <a class="active" href="#dashboard">⌂ <span>Desafios</span></a>
         <a href="#online">● <span>Jogadores online</span></a>
+        <NuxtLink to="/settings/profile">⚙ <span>Editar perfil</span></NuxtLink>
       </nav>
       <button class="logout mobile-hidden" @click="logOut">Sair</button>
     </aside>
@@ -113,8 +123,11 @@ async function logOut() {
           <p>Escolha seu oponente e comece um novo duelo.</p>
         </div>
         <div class="profile">
-          <div><strong>{{ auth.user?.nickname }}</strong><small>Rating {{ auth.user?.rating }}</small></div>
-          <span class="avatar">{{ auth.user?.nickname?.charAt(0).toUpperCase() }}</span>
+          <NuxtLink v-if="auth.user" class="profile-link" :to="`/profile/${encodeURIComponent(auth.user.nickname)}`">
+            <strong>{{ auth.user.nickname }}</strong><small>Rating {{ auth.user.rating }}</small>
+          </NuxtLink>
+          <img v-if="avatarUrl(auth.user)" class="avatar" :src="avatarUrl(auth.user) || ''" alt="Sua foto de perfil">
+          <span v-else class="avatar">{{ auth.user?.nickname?.charAt(0).toUpperCase() }}</span>
           <button @click="logOut">Sair</button>
         </div>
       </header>
@@ -129,8 +142,9 @@ async function logOut() {
         </div>
         <div v-if="receivedChallenges.length" class="list">
           <article v-for="item in receivedChallenges" :key="item.id" class="player-row">
-            <span class="avatar small">{{ item.challenger.nickname.charAt(0).toUpperCase() }}</span>
-            <div><strong>{{ item.challenger.nickname }}</strong><small>Rating {{ item.challenger.rating }} · 3 min</small></div>
+            <img v-if="avatarUrl(item.challenger)" class="avatar small" :src="avatarUrl(item.challenger) || ''" :alt="`Foto de ${item.challenger.nickname}`">
+            <span v-else class="avatar small">{{ item.challenger.nickname.charAt(0).toUpperCase() }}</span>
+            <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(item.challenger.nickname)}`"><strong>{{ item.challenger.nickname }}</strong></NuxtLink><small>Rating {{ item.challenger.rating }} · 3 min</small></div>
             <div class="actions"><button class="accept" @click="accept(item.id)">Aceitar</button><button class="decline" @click="decline(item.id)">Recusar</button></div>
           </article>
         </div>
@@ -145,8 +159,9 @@ async function logOut() {
         <div v-if="opponents.length" class="online-grid">
           <article v-for="opponent in opponents" :key="opponent.id" class="online-card">
             <span class="online-dot" />
-            <span class="avatar small">{{ opponent.nickname.charAt(0).toUpperCase() }}</span>
-            <div><strong>{{ opponent.nickname }}</strong><small>Rating {{ opponent.rating }}</small></div>
+            <img v-if="avatarUrl(opponent)" class="avatar small" :src="avatarUrl(opponent) || ''" :alt="`Foto de ${opponent.nickname}`">
+            <span v-else class="avatar small">{{ opponent.nickname.charAt(0).toUpperCase() }}</span>
+            <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(opponent.nickname)}`"><strong>{{ opponent.nickname }}</strong></NuxtLink><small>Rating {{ opponent.rating }}</small></div>
             <button :disabled="challengeSentTo(opponent.id)" @click="challenge(opponent.id)">
               {{ challengeSentTo(opponent.id) ? 'Aguardando' : 'Desafiar' }}
             </button>
@@ -172,8 +187,8 @@ nav { display: grid; gap: 0.5rem; } nav a { padding: 0.85rem 1rem; color: #806d5
 .content { display: grid; align-content: start; gap: 1.4rem; padding: 2rem; }
 .welcome, .panel { padding: 1.6rem; background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 18px; box-shadow: 0 14px 30px #60401f12; }
 .welcome { display: flex; align-items: center; justify-content: space-between; }.welcome h1, h2 { margin: 0; font-family: Georgia, serif; font-weight: 500; }.welcome p { margin: 0.4rem 0 0; color: #857060; }
-.profile { display: flex; align-items: center; gap: 0.8rem; text-align: right; }.profile div { display: grid; }.profile small, .player-row small, .online-card small { color: #8b7664; }
-.avatar { display: grid; width: 46px; height: 46px; place-items: center; color: white; font-weight: 700; background: var(--brown); border-radius: 50%; }.avatar.small { width: 40px; height: 40px; }
+.profile { display: flex; align-items: center; gap: 0.8rem; text-align: right; }.profile-link { display: grid; color: inherit; text-decoration: none; }.profile small, .player-row small, .online-card small { color: #8b7664; }.player-link { color: inherit; text-decoration: none; }.profile-link:hover, .player-link:hover { color: var(--brown); text-decoration: underline; }
+.avatar { display: grid; width: 46px; height: 46px; place-items: center; color: white; object-fit: cover; font-weight: 700; background: var(--brown); border-radius: 50%; }.avatar.small { width: 40px; height: 40px; }
 button { padding: 0.7rem 1rem; color: var(--ink); background: #f7eedf; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; }button:disabled { opacity: 0.6; cursor: default; }
 .connection { margin: 0; color: #6f855c; font-size: 0.9rem; }.connection span, .online-dot { display: inline-block; width: 8px; height: 8px; background: #668a57; border-radius: 50%; box-shadow: 0 0 8px #668a57; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 1.2rem; }.section-heading > span { color: #8b7664; font-size: 0.85rem; }.eyebrow { display: inline-block; margin-bottom: 0.5rem; padding: 0.3rem 0.6rem; color: var(--brown); background: #ead7bc; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }

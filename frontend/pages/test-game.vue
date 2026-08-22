@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 
-definePageMeta({ alias: ['/game/:gameId'] })
+definePageMeta({ alias: ['/game/:gameId'], middleware: 'auth' })
 
 type Player = {
   id: string
@@ -283,13 +283,15 @@ function playerName(playerId: string) {
     <div class="opponents">
       <article :class="{ active: currentTurn === 'white' }">
         <span>Brancas</span>
-        <strong>{{ whitePlayer?.nickname || 'Aguardando...' }}</strong>
+        <NuxtLink v-if="whitePlayer" :to="`/profile/${encodeURIComponent(whitePlayer.nickname)}`"><strong>{{ whitePlayer.nickname }}</strong></NuxtLink>
+        <strong v-else>Aguardando...</strong>
         <small v-if="whitePlayer">Rating {{ whitePlayer.rating }}</small>
       </article>
       <span class="versus">×</span>
       <article :class="{ active: currentTurn === 'black' }">
         <span>Pretas</span>
-        <strong>{{ blackPlayer?.nickname || 'Aguardando...' }}</strong>
+        <NuxtLink v-if="blackPlayer" :to="`/profile/${encodeURIComponent(blackPlayer.nickname)}`"><strong>{{ blackPlayer.nickname }}</strong></NuxtLink>
+        <strong v-else>Aguardando...</strong>
         <small v-if="blackPlayer">Rating {{ blackPlayer.rating }}</small>
       </article>
     </div>
