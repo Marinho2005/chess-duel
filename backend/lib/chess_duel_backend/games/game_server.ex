@@ -4,6 +4,7 @@ defmodule ChessDuelBackend.Games.GameServer do
   alias ChessDuelBackend.{GameRegistry, GameSupervisor}
   alias ChessDuelBackend.ChessValidator
   alias ChessDuelBackend.Games
+  alias ChessDuelBackend.Ratings
 
   require Logger
 
@@ -122,6 +123,7 @@ defmodule ChessDuelBackend.Games.GameServer do
         persistence_pid =
           spawn(fn ->
             monitor_ref = Process.monitor(game_server_pid)
+            maybe_rate_game(game)
             persistence_loop(game, monitor_ref)
           end)
 
@@ -515,6 +517,7 @@ defmodule ChessDuelBackend.Games.GameServer do
         next_game =
           case safely_update_game(game, attrs) do
             {:ok, updated_game} ->
+              maybe_rate_game(updated_game)
               updated_game
 
             {:error, changeset} ->
@@ -540,7 +543,8 @@ defmodule ChessDuelBackend.Games.GameServer do
     :exit, reason -> {:error, reason}
   end
 
-  defp persisted_result(%{game_over_reason: "abandonment"}), do: "abandoned"
+  defp persisted_result(%{game_over_reason: "abandonment", winner_player_id: nil}),
+    do: "abandoned"
 
   defp persisted_result(%{game_over_reason: reason}) when reason in ["stalemate", "draw"],
     do: "draw"
@@ -552,6 +556,31 @@ defmodule ChessDuelBackend.Games.GameServer do
       nil -> "draw"
     end
   end
+
+  defp maybe_rate_game(%{status: "finished", rated_at: nil} = game) do
+    case Ratings.rate_game(game.game_id) do
+      {:ok, %{white: white, black: black} = rating} ->
+        ChessDuelBackendWeb.Endpoint.broadcast("game:#{game.game_id}", "rating_updated", rating)
+
+        Logger.info(
+          "Rating atualizado na partida #{game.game_id}: " <>
+            "#{white.before}->#{white.after}, #{black.before}->#{black.after}"
+        )
+
+      {:ok, :already_rated} ->
+        :ok
+
+      {:error, reason} when reason in [:game_not_rateable, :invalid_players, :players_not_found] ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error(
+          "Nao foi possivel calcular rating da partida #{game.game_id}: #{inspect(reason)}"
+        )
+    end
+  end
+
+  defp maybe_rate_game(_game), do: :ok
 
   defp restore_from_game(state, game) do
     %{
