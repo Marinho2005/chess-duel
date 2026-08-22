@@ -3,6 +3,9 @@ defmodule ChessDuelBackend.Games.GameServer do
 
   alias ChessDuelBackend.{GameRegistry, GameSupervisor}
   alias ChessDuelBackend.ChessValidator
+  alias ChessDuelBackend.Games
+
+  require Logger
 
   @initial_fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
   # Pode ser sobrescrito com config :chess_duel_backend, :game_clock_initial_ms
@@ -80,29 +83,53 @@ defmodule ChessDuelBackend.Games.GameServer do
         @default_abandonment_grace_ms
       )
 
-    {:ok,
-     %{
-       game_id: game_id,
-       white_player_id: nil,
-       black_player_id: nil,
-       connected_player_counts: %{},
-       abandonment_timer_refs: %{},
-       abandonment_grace_ms: abandonment_grace_ms,
-       moves: [],
-       current_turn: "white",
-       fen: @initial_fen,
-       status: "in_progress",
-       game_over_reason: nil,
-       winner_player_id: nil,
-       is_check: false,
-       is_checkmate: false,
-       is_stalemate: false,
-       is_draw: false,
-       white_time_remaining_ms: initial_time_ms,
-       black_time_remaining_ms: initial_time_ms,
-       turn_started_at: nil,
-       clock_timer_ref: nil
-     }}
+    initial_state = %{
+      game_id: game_id,
+      white_player_id: nil,
+      black_player_id: nil,
+      connected_player_counts: %{},
+      abandonment_timer_refs: %{},
+      abandonment_grace_ms: abandonment_grace_ms,
+      moves: [],
+      current_turn: "white",
+      fen: @initial_fen,
+      status: "waiting",
+      game_over_reason: nil,
+      winner_player_id: nil,
+      is_check: false,
+      is_checkmate: false,
+      is_stalemate: false,
+      is_draw: false,
+      white_time_remaining_ms: initial_time_ms,
+      black_time_remaining_ms: initial_time_ms,
+      turn_started_at: nil,
+      clock_timer_ref: nil,
+      persistence_pid: nil
+    }
+
+    initial_attrs = persistence_attrs(initial_state)
+
+    case Games.get_or_create_game(game_id, initial_attrs) do
+      {:ok, game} ->
+        game_server_pid = self()
+
+        persistence_pid =
+          spawn(fn ->
+            monitor_ref = Process.monitor(game_server_pid)
+            persistence_loop(game, monitor_ref)
+          end)
+
+        state =
+          initial_state
+          |> restore_from_game(game)
+          |> Map.put(:persistence_pid, persistence_pid)
+          |> resume_clock_after_restore()
+
+        {:ok, state}
+
+      {:error, changeset} ->
+        {:stop, {:game_persistence_failed, changeset}}
+    end
   end
 
   @impl true
@@ -142,6 +169,8 @@ defmodule ChessDuelBackend.Games.GameServer do
           |> assign_player_if_needed(color, player_id)
           |> increment_connection(player_id)
           |> cancel_abandonment_timer(color)
+
+        persist_state(state)
 
         {:reply, {:ok, %{color: color, state: snapshot_clock(state)}}, state}
     end
@@ -183,7 +212,8 @@ defmodule ChessDuelBackend.Games.GameServer do
               to: to,
               player: player,
               promotion: promotion,
-              captured: result.captured
+              captured: result.captured,
+              timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
             }
 
             next_turn = opposite_color(state.current_turn)
@@ -209,6 +239,8 @@ defmodule ChessDuelBackend.Games.GameServer do
                 clock_timer_ref: nil
               })
               |> schedule_current_clock_unless_finished()
+
+            persist_state(new_state)
 
             {:reply, {:ok, snapshot_clock(new_state, now)}, new_state}
         end
@@ -279,12 +311,16 @@ defmodule ChessDuelBackend.Games.GameServer do
     winner = opposite_color(state.current_turn)
 
     winner_player_id = player_id_for_color(state, winner)
-    broadcast_game_over(state, "timeout", winner_player_id)
+    finished_state = finish_state(state, "timeout", winner_player_id)
 
-    finish_state(state, "timeout", winner_player_id)
+    persist_state(finished_state)
+    broadcast_game_over(finished_state, "timeout", winner_player_id)
+    finished_state
   end
 
   defp finish_by_abandonment(state, abandoned_color) do
+    state = snapshot_clock(state)
+
     winner_player_id =
       abandoned_color
       |> opposite_color()
@@ -296,9 +332,11 @@ defmodule ChessDuelBackend.Games.GameServer do
         end
       end)
 
-    broadcast_game_over(state, "abandonment", winner_player_id)
+    finished_state = finish_state(state, "abandonment", winner_player_id)
 
-    finish_state(state, "abandonment", winner_player_id)
+    persist_state(finished_state)
+    broadcast_game_over(finished_state, "abandonment", winner_player_id)
+    finished_state
   end
 
   defp finish_state(state, reason, winner_player_id) do
@@ -411,6 +449,125 @@ defmodule ChessDuelBackend.Games.GameServer do
         %{state | abandonment_timer_refs: refs}
     end
   end
+
+  defp persist_state(%{persistence_pid: persistence_pid} = state)
+       when is_pid(persistence_pid) do
+    send(persistence_pid, {:persist, persistence_attrs(state)})
+    :ok
+  end
+
+  defp persist_state(_state), do: :ok
+
+  defp persistence_attrs(state) do
+    attrs = %{
+      status: state.status,
+      current_turn: state.current_turn,
+      white_player_id: state.white_player_id,
+      black_player_id: state.black_player_id,
+      moves: state.moves,
+      final_fen: state.fen,
+      white_time_remaining_ms: state.white_time_remaining_ms,
+      black_time_remaining_ms: state.black_time_remaining_ms
+    }
+
+    if state.status == "finished" do
+      Map.merge(attrs, %{
+        result: persisted_result(state),
+        end_reason: state.game_over_reason,
+        finished_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+    else
+      attrs
+    end
+  end
+
+  defp persistence_loop(game, monitor_ref) do
+    receive do
+      {:persist, attrs} ->
+        next_game =
+          case safely_update_game(game, attrs) do
+            {:ok, updated_game} ->
+              updated_game
+
+            {:error, changeset} ->
+              Logger.error(
+                "Nao foi possivel persistir a partida #{game.game_id}: #{inspect(changeset)}"
+              )
+
+              game
+          end
+
+        persistence_loop(next_game, monitor_ref)
+
+      {:DOWN, ^monitor_ref, :process, _pid, _reason} ->
+        :ok
+    end
+  end
+
+  defp safely_update_game(game, attrs) do
+    Games.update_game(game, attrs)
+  rescue
+    exception -> {:error, Exception.message(exception)}
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
+  defp persisted_result(%{game_over_reason: "abandonment"}), do: "abandoned"
+
+  defp persisted_result(%{game_over_reason: reason}) when reason in ["stalemate", "draw"],
+    do: "draw"
+
+  defp persisted_result(state) do
+    case player_color(state, state.winner_player_id) do
+      "white" -> "white_wins"
+      "black" -> "black_wins"
+      nil -> "draw"
+    end
+  end
+
+  defp restore_from_game(state, game) do
+    %{
+      state
+      | white_player_id: game.white_player_id,
+        black_player_id: game.black_player_id,
+        moves: normalize_moves(game.moves || []),
+        current_turn: game.current_turn,
+        fen: game.final_fen || @initial_fen,
+        status: game.status,
+        game_over_reason: game.end_reason,
+        winner_player_id: restored_winner_player_id(game),
+        is_checkmate: game.end_reason == "checkmate",
+        is_stalemate: game.end_reason == "stalemate",
+        is_draw: game.end_reason == "draw",
+        white_time_remaining_ms: game.white_time_remaining_ms || state.white_time_remaining_ms,
+        black_time_remaining_ms: game.black_time_remaining_ms || state.black_time_remaining_ms
+    }
+  end
+
+  defp normalize_moves(moves) do
+    Enum.map(moves, fn move ->
+      %{
+        from: move[:from] || move["from"],
+        to: move[:to] || move["to"],
+        player: move[:player] || move["player"],
+        promotion: move[:promotion] || move["promotion"],
+        captured: move[:captured] || move["captured"],
+        timestamp: move[:timestamp] || move["timestamp"]
+      }
+    end)
+  end
+
+  defp restored_winner_player_id(%{result: "white_wins"} = game), do: game.white_player_id
+  defp restored_winner_player_id(%{result: "black_wins"} = game), do: game.black_player_id
+  defp restored_winner_player_id(_game), do: nil
+
+  defp resume_clock_after_restore(%{status: "in_progress"} = state) do
+    state
+    |> Map.put(:turn_started_at, System.monotonic_time(:millisecond))
+    |> schedule_current_clock()
+  end
+
+  defp resume_clock_after_restore(state), do: state
 
   defp via_tuple(game_id), do: {:via, Registry, {GameRegistry, game_id}}
 end
