@@ -59,13 +59,13 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - [x] **1.5 Reconexão robusta** — Identidade estável do jogador (branco/preto) entre reconexões, via `player_id` persistido em `localStorage` no cliente de teste. Timeout de graça de 60 segundos antes de declarar abandono quando um jogador desconecta.
 - [x] **1.6 Persistência real no Postgres** — Salvar a partida no banco (lances, FEN, tempos, resultado) tanto durante o jogo (escrita assíncrona a cada lance) quanto ao final (resultado, motivo, timestamp de término). Opcionalmente, permitir recuperação de estado do GenServer a partir do banco em caso de restart do servidor.
 
-### Fase 2 — Contas e ranking
+### Fase 2 — Contas e ranking — COMPLETA
 
 - [x] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes. Contas locais precisam confirmar o e-mail antes de receber token ou acessar o sistema; em desenvolvimento, o link é exibido no log do backend.
 - [x] **2.2 OAuth (login social)** — Login com Google via Ueberauth, vinculado por ID/e-mail à mesma tabela de usuários e integrado ao bearer token do frontend.
 - [x] **2.3 Perfil de jogador** — Página pública com foto de perfil (inicial como fallback), apelido, país, rating e data de criação; edição autenticada do próprio perfil e proteção das rotas privadas.
 - [x] **2.4 Sistema de rating** — ELO com K=32 atualizado de forma assíncrona, atômica e idempotente ao fim da partida; snapshots e histórico de variações persistidos para auditoria.
-- [ ] **2.5 Histórico de partidas** — Lista de partidas jogadas por usuário, com resultado e data, usando a tabela `games` já persistida desde a Fase 1.6.
+- [x] **2.5 Histórico de partidas** — Lista paginada das partidas finalizadas do usuário, com oponente, resultado sob sua perspectiva, motivo, variação de rating e data.
 
 ### Fase 3 — Matchmaking sério
 

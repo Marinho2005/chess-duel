@@ -9,17 +9,23 @@ type PublicProfile = {
 }
 
 const route = useRoute()
+const auth = useAuthStore()
 const config = useRuntimeConfig()
 const profile = ref<PublicProfile | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
+const isOwnProfile = computed(() => auth.user?.id === profile.value?.id)
 
 const avatarUrl = computed(() => resolveAvatarUrl(
   profile.value?.avatar_url,
   config.public.api.baseURL
 ))
 
-onMounted(loadProfile)
+onMounted(async () => {
+  auth.restoreSession()
+  if (auth.token) await auth.fetchCurrentUser()
+  await loadProfile()
+})
 watch(() => route.params.nickname, loadProfile)
 
 async function loadProfile() {
@@ -72,6 +78,7 @@ function memberSince(date: string) {
       </div>
 
       <p class="member">Membro desde {{ memberSince(profile.inserted_at) }}</p>
+      <NuxtLink v-if="isOwnProfile" class="history-link" to="/profile/history">Ver histórico de partidas →</NuxtLink>
     </section>
   </main>
 </template>
@@ -84,5 +91,6 @@ function memberSince(date: string) {
 .eyebrow { color: #925b35; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }.identity h1 { margin: 0.3rem 0; font: 500 clamp(2rem, 6vw, 3.4rem) Georgia, serif; }.identity p, .member { margin: 0; color: #857060; }
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 2.5rem 0; }.stats article { display: grid; gap: 0.35rem; padding: 1.4rem; background: #efe3cf; border: 1px solid #dfcfb8; border-radius: 14px; }.stats strong { color: #925b35; font: 500 1.8rem Georgia, serif; }.stats span { color: #806d5d; }
 .status { text-align: center; }.piece { color: #925b35; font-size: 3rem; }.status h1 { font-family: Georgia, serif; }
+.history-link { display: inline-block; margin-top: 1.5rem; padding: .85rem 1.1rem; color: white; font-weight: 700; text-decoration: none; background: #925b35; border-radius: 10px; }
 @media (max-width: 560px) { .identity { align-items: flex-start; }.avatar { width: 64px; height: 64px; }.stats { grid-template-columns: 1fr; } }
 </style>
