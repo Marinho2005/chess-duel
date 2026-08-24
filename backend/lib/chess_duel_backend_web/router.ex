@@ -10,6 +10,17 @@ defmodule ChessDuelBackendWeb.Router do
     plug ChessDuelBackendWeb.UserAuth, :require_authenticated_user
   end
 
+  pipeline :oauth do
+    plug :fetch_session
+  end
+
+  scope "/auth", ChessDuelBackendWeb do
+    pipe_through :oauth
+
+    get "/:provider", AuthController, :request
+    get "/:provider/callback", AuthController, :callback
+  end
+
   scope "/api", ChessDuelBackendWeb do
     pipe_through :api
 

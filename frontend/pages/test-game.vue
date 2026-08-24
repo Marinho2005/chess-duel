@@ -298,7 +298,7 @@ function playerName(playerId: string) {
   <main class="container">
     <h1>Partida em tempo real</h1>
     <NuxtLink to="/lobby" class="back-link">← Voltar ao salao</NuxtLink>
-    <p v-if="!auth.token"><NuxtLink to="/login">Entrar</NuxtLink> · <NuxtLink to="/register">Criar conta</NuxtLink></p>
+    <p v-if="!auth.token"><NuxtLink to="/">Entrar ou criar conta</NuxtLink></p>
     <p class="muted">Canal: <code>game:{{ gameId }}</code></p>
     <p>{{ connectionStatus }} · turno atual: <strong>{{ currentTurn }}</strong></p>
     <p v-if="auth.user" class="muted">Usuario: <strong>{{ auth.user.nickname }}</strong> · rating {{ auth.user.rating }} · <code>{{ auth.user.id }}</code></p>

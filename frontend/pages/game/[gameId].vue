@@ -239,9 +239,7 @@ function formatClock(milliseconds: number) {
 }
 
 function avatarUrl(player: Player | null) {
-  return player?.avatar_url
-    ? `${config.public.api.baseURL.replace(/\/$/, '')}${player.avatar_url}`
-    : null
+  return resolveAvatarUrl(player?.avatar_url, config.public.api.baseURL)
 }
 
 function playerName(playerId: string) {

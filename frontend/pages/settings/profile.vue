@@ -12,8 +12,7 @@ const config = useRuntimeConfig()
 
 const currentAvatarUrl = computed(() => {
   if (previewUrl.value) return previewUrl.value
-  if (!auth.user?.avatar_url) return null
-  return `${config.public.api.baseURL.replace(/\/$/, '')}${auth.user.avatar_url}`
+  return resolveAvatarUrl(auth.user?.avatar_url, config.public.api.baseURL)
 })
 
 onMounted(() => {

@@ -85,6 +85,107 @@ defmodule ChessDuelBackend.Accounts do
     |> Repo.insert()
   end
 
+  @doc "Localiza, vincula ou cria um usuario a partir de uma identidade OAuth confiavel."
+  def authenticate_oauth_user(provider, attrs)
+      when provider == :google and is_map(attrs) do
+    uid = attrs |> Map.fetch!(:uid) |> to_string()
+    email = normalize_oauth_email(attrs[:email])
+
+    cond do
+      uid == "" ->
+        {:error, :invalid_oauth_identity}
+
+      user = get_user_by_oauth_id(provider, uid) ->
+        {:ok, user}
+
+      email == "" ->
+        {:error, :oauth_email_required}
+
+      user = get_user_by_email(email) ->
+        link_oauth_identity(user, provider, uid)
+
+      true ->
+        create_oauth_user(provider, uid, email, attrs)
+    end
+  end
+
+  defp get_user_by_oauth_id(:google, uid), do: Repo.get_by(User, google_id: uid)
+
+  defp link_oauth_identity(user, provider, uid) do
+    field = oauth_field(provider)
+
+    case Map.get(user, field) do
+      nil -> user |> User.oauth_link_changeset(provider, uid) |> Repo.update()
+      ^uid -> {:ok, user}
+      _other_uid -> {:error, :oauth_identity_conflict}
+    end
+  end
+
+  defp create_oauth_user(provider, uid, email, attrs) do
+    oauth_attrs =
+      %{
+        email: email,
+        nickname: unique_oauth_nickname(attrs[:nickname] || attrs[:name] || email),
+        avatar_path: normalize_oauth_avatar(attrs[:avatar_url]),
+        confirmed_at: NaiveDateTime.utc_now(:second)
+      }
+      |> Map.put(oauth_field(provider), uid)
+
+    case %User{} |> User.oauth_registration_changeset(oauth_attrs) |> Repo.insert() do
+      {:ok, user} ->
+        {:ok, user}
+
+      {:error, _changeset} = error ->
+        # Se duas callbacks da mesma conta chegarem juntas, a constraint do
+        # banco decide e reutilizamos a conta que venceu a corrida.
+        result = get_user_by_oauth_id(provider, uid) || get_user_by_email(email) || error
+
+        case result do
+          %User{} = user -> link_oauth_identity(user, provider, uid)
+          _ -> error
+        end
+    end
+  end
+
+  defp unique_oauth_nickname(source) do
+    base =
+      source
+      |> to_string()
+      |> String.split("@", parts: 2)
+      |> hd()
+      |> String.normalize(:nfd)
+      |> String.replace(~r/[^a-zA-Z0-9_]+/u, "_")
+      |> String.trim("_")
+      |> String.slice(0, 32)
+      |> ensure_nickname_length()
+
+    Stream.iterate(0, &(&1 + 1))
+    |> Enum.find_value(fn
+      0 ->
+        if is_nil(get_user_by_nickname(base)), do: base
+
+      suffix ->
+        suffix_text = "_#{suffix}"
+        candidate = String.slice(base, 0, 32 - String.length(suffix_text)) <> suffix_text
+        if is_nil(get_user_by_nickname(candidate)), do: candidate
+    end)
+  end
+
+  defp ensure_nickname_length(value) when byte_size(value) >= 3, do: value
+  defp ensure_nickname_length(value), do: String.pad_trailing(value, 3, "_")
+
+  defp normalize_oauth_avatar(value) when is_binary(value) do
+    value = String.trim(value)
+    if String.starts_with?(value, ["https://", "http://"]), do: value
+  end
+
+  defp normalize_oauth_avatar(_value), do: nil
+
+  defp normalize_oauth_email(value) when is_binary(value), do: String.trim(value)
+  defp normalize_oauth_email(_value), do: ""
+
+  defp oauth_field(:google), do: :google_id
+
   ## Settings
 
   def update_user_profile(%User{} = user, attrs) do

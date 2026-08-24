@@ -47,6 +47,19 @@ export const useAuthStore = defineStore('auth', () => {
     return authenticate('/api/users/log_in', { email, password })
   }
 
+  async function completeOAuth(tokenValue: string) {
+    if (!tokenValue) return false
+
+    token.value = tokenValue
+    error.value = ''
+
+    if (import.meta.client) {
+      sessionStorage.setItem(tokenStorageKey, tokenValue)
+    }
+
+    return fetchCurrentUser()
+  }
+
   async function authenticate(path: string, userData: Record<string, string>) {
     error.value = ''
 
@@ -186,5 +199,5 @@ export const useAuthStore = defineStore('auth', () => {
     return 'Nao foi possivel concluir a solicitacao.'
   }
 
-  return { token, user, error, restoreSession, register, logIn, fetchCurrentUser, updateProfile, updateAvatar, logOut }
+  return { token, user, error, restoreSession, register, logIn, completeOAuth, fetchCurrentUser, updateProfile, updateAvatar, logOut }
 })

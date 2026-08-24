@@ -7,6 +7,16 @@ const email = ref('')
 const password = ref('')
 const submitting = ref(false)
 const sessionExpired = computed(() => route.query.session === 'expired')
+const config = useRuntimeConfig()
+const oauthError = computed(() => {
+  if (route.query.oauth_error === 'oauth_not_configured') {
+    return 'O login social ainda não foi configurado no servidor.'
+  }
+
+  return route.query.oauth_error
+    ? 'Não foi possível entrar com a conta social. Tente novamente.'
+    : ''
+})
 
 onMounted(async () => {
   auth.restoreSession()
@@ -29,6 +39,10 @@ async function submit() {
   if (authenticated) {
     await navigateTo('/lobby')
   }
+}
+
+function socialLogin(provider: 'google') {
+  window.location.assign(`${config.public.api.baseURL.replace(/\/$/, '')}/auth/${provider}`)
 }
 </script>
 
@@ -63,7 +77,19 @@ async function submit() {
       <button class="primary" type="submit" :disabled="submitting">
         {{ submitting ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar minha conta' }}
       </button>
-      <p v-if="auth.error" class="error">{{ auth.error }}</p>
+      <template v-if="mode === 'login'">
+        <div class="divider"><span>ou continue com</span></div>
+        <button class="social google" type="button" @click="socialLogin('google')">
+          <svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.55h3.24c1.9-1.75 2.98-4.33 2.98-7.42Z"/>
+            <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.35l-3.24-2.55c-.9.6-2.05.96-3.38.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/>
+            <path fill="#FBBC05" d="M6.39 13.93A6.02 6.02 0 0 1 6.07 12c0-.67.11-1.32.32-1.93V7.45H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.55l3.35-2.62Z"/>
+            <path fill="#EA4335" d="M12 5.94c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.64 9.64 0 0 0 12 2a10 10 0 0 0-8.96 5.45l3.35 2.62C7.18 7.7 9.39 5.94 12 5.94Z"/>
+          </svg>
+          <span>Continuar com Google</span>
+        </button>
+      </template>
+      <p v-if="auth.error || oauthError" class="error">{{ auth.error || oauthError }}</p>
     </form>
 
     <p class="tagline">Entre, encontre um oponente e comece seu duelo.</p>
@@ -99,6 +125,12 @@ input, button { padding: 0.9rem 1rem; color: inherit; background: #fff; border: 
 button { cursor: pointer; }
 .primary { color: white; font-weight: 700; background: var(--brown); border-color: var(--brown); box-shadow: 0 8px 16px #7b472a30; }
 .primary:disabled { opacity: 0.65; cursor: wait; }
+.divider { display: flex; align-items: center; gap: 0.75rem; color: #9a8471; font-size: 0.8rem; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #dfd2c1; }
+.social { display: inline-flex; align-items: center; justify-content: center; gap: 0.7rem; font-weight: 700; background: #fff; }
+.social.google { color: #65452f; }
+.google-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
+.social:hover { transform: translateY(-1px); box-shadow: 0 5px 12px #60401f1c; }
 .hint { margin: -0.4rem 0 0; color: #8b7664; font-size: 0.82rem; }
 .error { margin: 0; color: #b33e2e; text-align: center; }
 .session-message { margin: 0; padding: 0.8rem; color: #74472e; text-align: center; background: #efe2ce; border-radius: 10px; }
