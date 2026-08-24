@@ -21,8 +21,10 @@ defmodule ChessDuelBackendWeb.GamesChannel do
   end
 
   @impl true
-  def handle_in("challenge", %{"user_id" => challenged_id}, socket) do
-    case Lobby.create_challenge(socket.assigns.user_id, challenged_id) do
+  def handle_in("challenge", %{"user_id" => challenged_id} = payload, socket) do
+    time_control_id = Map.get(payload, "time_control", "blitz_3_0")
+
+    case Lobby.create_challenge(socket.assigns.user_id, challenged_id, time_control_id) do
       {:ok, state} ->
         broadcast_lobby(state, socket)
         {:reply, :ok, socket}

@@ -36,6 +36,8 @@ type GameState = {
   is_check: boolean
   white_time_remaining_ms: number
   black_time_remaining_ms: number
+  initial_time_ms: number
+  increment_ms: number
 }
 
 type MoveMade = Move & {
@@ -75,6 +77,8 @@ const blackTime = ref(180_000)
 const serverWhiteTime = ref(180_000)
 const serverBlackTime = ref(180_000)
 const clockReceivedAt = ref(Date.now())
+const initialTimeMs = ref(180_000)
+const incrementMs = ref(0)
 
 let socket: Socket | null = null
 let channel: Channel | null = null
@@ -92,6 +96,17 @@ const bottomColor = computed<Color>(() => playerColor.value)
 const topTime = computed(() => topColor.value === 'white' ? whiteTime.value : blackTime.value)
 const bottomTime = computed(() => bottomColor.value === 'white' ? whiteTime.value : blackTime.value)
 const boardDisabled = computed(() => pendingMove.value || gameStatus.value === 'finished')
+const timeControlLabel = computed(() => {
+  const minutes = Math.floor(initialTimeMs.value / 60_000)
+  const increment = Math.floor(incrementMs.value / 1_000)
+  const category = minutes <= 1 ? 'Bullet' : minutes <= 5 ? 'Blitz' : 'Rapid'
+  return `${category} ${minutes}+${increment}`
+})
+const timeControlDescription = computed(() => {
+  const minutes = Math.floor(initialTimeMs.value / 60_000)
+  const increment = Math.floor(incrementMs.value / 1_000)
+  return increment > 0 ? `${minutes} min · incremento de ${increment}s` : `${minutes} min · sem incremento`
+})
 
 onMounted(async () => {
   auth.restoreSession()
@@ -132,6 +147,8 @@ function applyInitialState(state: GameState) {
   whitePlayer.value = state.white_player
   blackPlayer.value = state.black_player
   isCheck.value = state.is_check
+  initialTimeMs.value = state.initial_time_ms
+  incrementMs.value = state.increment_ms
   syncClocks(state.white_time_remaining_ms, state.black_time_remaining_ms)
   connectionStatus.value = 'Conectado em tempo real'
 
@@ -319,7 +336,7 @@ function gameOverReason(reason: GameOver['reason']) {
         <div class="panel-heading">
           <span>PARTIDA RANQUEADA</span>
           <h1>Duelo em andamento</h1>
-          <p>3 minutos · sem incremento</p>
+          <p>{{ timeControlLabel }} · {{ timeControlDescription }}</p>
         </div>
 
         <div v-if="gameOverMessage" class="result-card">

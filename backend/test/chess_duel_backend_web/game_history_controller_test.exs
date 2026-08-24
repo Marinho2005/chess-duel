@@ -59,6 +59,7 @@ defmodule ChessDuelBackendWeb.GameHistoryControllerTest do
     assert newest_item["result"] == "draw"
     assert newest_item["end_reason"] == "stalemate"
     assert newest_item["rating_change"] == 0
+    assert newest_item["time_control"]["label"] == "Blitz 3+0"
 
     assert middle_item["id"] == middle.id
     assert middle_item["result"] == "loss"

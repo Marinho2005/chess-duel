@@ -103,6 +103,11 @@ defmodule ChessDuelBackend.Games do
         result: result_for_player(game.result, color),
         end_reason: game.end_reason,
         rating_change: Map.get(rating_changes, game.id),
+        time_control:
+          ChessDuelBackend.Games.TimeControl.from_values(
+            game.initial_time_ms,
+            game.increment_ms
+          ),
         finished_at: game.finished_at
       }
     end)

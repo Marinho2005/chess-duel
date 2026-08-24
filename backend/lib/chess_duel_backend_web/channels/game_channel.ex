@@ -96,7 +96,9 @@ defmodule ChessDuelBackendWeb.GameChannel do
       is_stalemate: state.is_stalemate,
       is_draw: state.is_draw,
       white_time_remaining_ms: state.white_time_remaining_ms,
-      black_time_remaining_ms: state.black_time_remaining_ms
+      black_time_remaining_ms: state.black_time_remaining_ms,
+      initial_time_ms: state.initial_time_ms,
+      increment_ms: state.increment_ms
     }
   end
 
