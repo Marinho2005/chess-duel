@@ -9,11 +9,19 @@ defmodule ChessDuelBackendWeb.UserRegistrationController do
 
     case Accounts.register_user(attrs) do
       {:ok, user} ->
-        token = Accounts.generate_user_api_token(user)
+        frontend_url = Application.fetch_env!(:chess_duel_backend, :frontend_url)
+
+        {:ok, _email} =
+          Accounts.deliver_user_confirmation_instructions(user, fn token ->
+            "#{frontend_url}/auth/confirm/#{token}"
+          end)
 
         conn
         |> put_status(:created)
-        |> json(%{token: token, user: UserJSON.data(user)})
+        |> json(%{
+          status: "pending_confirmation",
+          message: "Verifique seu email para confirmar sua conta antes de fazer login."
+        })
 
       {:error, changeset} ->
         conn

@@ -2,6 +2,7 @@ defmodule ChessDuelBackendWeb.UserSessionController do
   use ChessDuelBackendWeb, :controller
 
   alias ChessDuelBackend.Accounts
+  alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackendWeb.UserJSON
 
   def create(conn, params) do
@@ -14,6 +15,14 @@ defmodule ChessDuelBackendWeb.UserSessionController do
         conn
         |> put_status(:unauthorized)
         |> json(%{error: "invalid_email_or_password"})
+
+      %User{confirmed_at: nil} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{
+          error: "email_not_confirmed",
+          message: "Confirme seu email antes de fazer login."
+        })
 
       user ->
         token = Accounts.generate_user_api_token(user)

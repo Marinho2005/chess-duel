@@ -26,6 +26,7 @@ defmodule ChessDuelBackendWeb.Router do
 
     get "/health", HealthController, :index
     post "/users/register", UserRegistrationController, :create
+    post "/users/confirm/:token", UserConfirmationController, :create
     post "/users/log_in", UserSessionController, :create
     get "/profiles/:nickname", UserController, :show
   end

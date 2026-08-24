@@ -4,6 +4,8 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   require Phoenix.ChannelTest
 
   alias ChessDuelBackend.Accounts
+  alias ChessDuelBackend.Accounts.User
+  alias ChessDuelBackend.Repo
   alias ChessDuelBackend.Games.GameServer
   alias ChessDuelBackendWeb.GameChannel
   alias ChessDuelBackendWeb.UserSocket
@@ -16,6 +18,7 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
         password: "password1234"
       })
 
+    user = confirm_user!(user)
     token = Accounts.generate_user_api_token(user)
 
     assert {:ok, socket} = Phoenix.ChannelTest.connect(UserSocket, %{"token" => token})
@@ -67,6 +70,12 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
         password: "password1234"
       })
 
+    confirm_user!(user)
+  end
+
+  defp confirm_user!(user) do
     user
+    |> User.confirm_changeset()
+    |> Repo.update!()
   end
 end

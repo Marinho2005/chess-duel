@@ -15,6 +15,11 @@ type AuthResponse = {
   user: AuthUser
 }
 
+type RegistrationResponse = {
+  status: 'pending_confirmation'
+  message: string
+}
+
 const tokenStorageKey = 'chess-duel:auth-token'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -40,7 +45,20 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function register(email: string, password: string, nickname: string) {
-    return authenticate('/api/users/register', { email, password, nickname })
+    error.value = ''
+
+    try {
+      const response = await $fetch<RegistrationResponse>('/api/users/register', {
+        baseURL: config.public.api.baseURL,
+        method: 'POST',
+        body: { user: { email, password, nickname } }
+      })
+
+      return response.status === 'pending_confirmation'
+    } catch (requestError) {
+      error.value = formatRequestError(requestError)
+      return false
+    }
   }
 
   async function logIn(email: string, password: string) {
@@ -193,6 +211,10 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (data?.error === 'invalid_email_or_password') {
         return 'Email ou senha invalidos.'
+      }
+
+      if (data?.error === 'email_not_confirmed') {
+        return 'Confirme seu e-mail antes de entrar.'
       }
     }
 

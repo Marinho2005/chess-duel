@@ -6,6 +6,7 @@ const nickname = ref('')
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
+const confirmationPending = ref(false)
 const sessionExpired = computed(() => route.query.session === 'expired')
 const config = useRuntimeConfig()
 const oauthError = computed(() => {
@@ -29,11 +30,19 @@ onMounted(async () => {
 async function submit() {
   submitting.value = true
 
-  const authenticated =
-    mode.value === 'login'
-      ? await auth.logIn(email.value, password.value)
-      : await auth.register(email.value, password.value, nickname.value)
+  if (mode.value === 'register') {
+    confirmationPending.value = await auth.register(email.value, password.value, nickname.value)
+    submitting.value = false
 
+    if (confirmationPending.value) {
+      password.value = ''
+      mode.value = 'login'
+    }
+
+    return
+  }
+
+  const authenticated = await auth.logIn(email.value, password.value)
   submitting.value = false
 
   if (authenticated) {
@@ -55,6 +64,9 @@ function socialLogin(provider: 'google') {
 
     <form class="auth-card" @submit.prevent="submit">
       <p v-if="sessionExpired" class="session-message">Sua sessão expirou. Entre novamente para continuar.</p>
+      <p v-if="confirmationPending" class="success-message">
+        Conta criada! Verifique seu e-mail e confirme a conta antes de entrar. No ambiente de desenvolvimento, o link aparece no terminal do backend.
+      </p>
       <div class="tabs" role="tablist">
         <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'">Entrar</button>
         <button type="button" :class="{ active: mode === 'register' }" @click="mode = 'register'">Criar conta</button>
@@ -134,5 +146,6 @@ button { cursor: pointer; }
 .hint { margin: -0.4rem 0 0; color: #8b7664; font-size: 0.82rem; }
 .error { margin: 0; color: #b33e2e; text-align: center; }
 .session-message { margin: 0; padding: 0.8rem; color: #74472e; text-align: center; background: #efe2ce; border-radius: 10px; }
+.success-message { margin: 0; padding: 0.8rem; color: #345b36; text-align: center; background: #e4f0df; border: 1px solid #c6ddbf; border-radius: 10px; }
 .tagline { max-width: 520px; margin: 0; color: #806d5d; text-align: center; }
 </style>

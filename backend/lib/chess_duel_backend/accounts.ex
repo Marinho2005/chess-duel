@@ -85,6 +85,27 @@ defmodule ChessDuelBackend.Accounts do
     |> Repo.insert()
   end
 
+  def deliver_user_confirmation_instructions(%User{} = user, confirmation_url_fun)
+      when is_function(confirmation_url_fun, 1) do
+    {encoded_token, user_token} = UserToken.build_confirmation_token(user)
+    Repo.insert!(user_token)
+    UserNotifier.deliver_confirmation_instructions(user, confirmation_url_fun.(encoded_token))
+  end
+
+  def confirm_user(token) when is_binary(token) do
+    with {:ok, query} <- UserToken.verify_confirmation_token_query(token),
+         {%User{confirmed_at: nil} = user, user_token} <- Repo.one(query) do
+      Repo.transact(fn ->
+        with {:ok, confirmed_user} <- user |> User.confirm_changeset() |> Repo.update() do
+          Repo.delete!(user_token)
+          {:ok, confirmed_user}
+        end
+      end)
+    else
+      _ -> {:error, :invalid_or_expired_token}
+    end
+  end
+
   @doc "Localiza, vincula ou cria um usuario a partir de uma identidade OAuth confiavel."
   def authenticate_oauth_user(provider, attrs)
       when provider == :google and is_map(attrs) do

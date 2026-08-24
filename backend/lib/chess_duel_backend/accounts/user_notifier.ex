@@ -1,9 +1,15 @@
 defmodule ChessDuelBackend.Accounts.UserNotifier do
+  require Logger
   alias ChessDuelBackend.Accounts.User
 
-  # A infraestrutura de email sera adicionada quando confirmacao por email
-  # entrar no escopo. Por enquanto o notifier preserva o contrato do gerador.
   defp deliver(recipient, subject, body) do
+    Logger.info("""
+    [ChessDuel email - desenvolvimento]
+    Para: #{recipient}
+    Assunto: #{subject}
+    #{body}
+    """)
+
     {:ok, %{to: recipient, subject: subject, body: body}}
   end
 
@@ -37,6 +43,23 @@ defmodule ChessDuelBackend.Accounts.UserNotifier do
     end
   end
 
+  def deliver_confirmation_instructions(user, url) do
+    deliver(user.email, "Confirme sua conta ChessDuel", """
+
+    ==============================
+
+    Ola #{user.email},
+
+    Confirme sua conta acessando o link abaixo:
+
+    #{url}
+
+    Se voce nao criou esta conta, ignore esta mensagem.
+
+    ==============================
+    """)
+  end
+
   defp deliver_magic_link_instructions(user, url) do
     deliver(user.email, "Log in instructions", """
 
@@ -49,23 +72,6 @@ defmodule ChessDuelBackend.Accounts.UserNotifier do
     #{url}
 
     If you didn't request this email, please ignore this.
-
-    ==============================
-    """)
-  end
-
-  defp deliver_confirmation_instructions(user, url) do
-    deliver(user.email, "Confirmation instructions", """
-
-    ==============================
-
-    Hi #{user.email},
-
-    You can confirm your account by visiting the URL below:
-
-    #{url}
-
-    If you didn't create an account with us, please ignore this.
 
     ==============================
     """)
