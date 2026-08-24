@@ -4,15 +4,24 @@ import { Socket, type Channel } from 'phoenix'
 definePageMeta({ middleware: 'auth' })
 
 type LobbyUser = { id: string; nickname: string; rating: number; avatar_url: string | null }
-type Challenge = { id: string; challenger: LobbyUser; challenged: LobbyUser }
+type TimeControl = { id: string; label: string; initial_time_ms: number; increment_ms: number }
+type Challenge = { id: string; challenger: LobbyUser; challenged: LobbyUser; time_control: TimeControl }
 type LobbyState = { users: LobbyUser[]; challenges: Challenge[] }
-type AcceptedGame = { game_id: string; white_player: LobbyUser; black_player: LobbyUser }
+type AcceptedGame = { game_id: string; white_player: LobbyUser; black_player: LobbyUser; time_control: TimeControl }
+
+const timeControls = [
+  { id: 'bullet_1_0', label: 'Bullet 1+0' },
+  { id: 'blitz_3_0', label: 'Blitz 3+0' },
+  { id: 'blitz_5_3', label: 'Blitz 5+3' },
+  { id: 'rapid_10_0', label: 'Rapid 10+0' }
+] as const
 
 const auth = useAuthStore()
 const users = ref<LobbyUser[]>([])
 const challenges = ref<Challenge[]>([])
 const status = ref('Conectando ao salao...')
 const errorMessage = ref('')
+const selectedTimeControl = ref<(typeof timeControls)[number]['id']>('blitz_3_0')
 const config = useRuntimeConfig()
 
 let socket: Socket | null = null
@@ -63,7 +72,7 @@ function applyLobbyState(state: LobbyState) {
 }
 
 function challenge(userId: string) {
-  channel?.push('challenge', { user_id: userId })
+  channel?.push('challenge', { user_id: userId, time_control: selectedTimeControl.value })
     .receive('error', showChannelError)
 }
 
@@ -81,7 +90,8 @@ function showChannelError(error: { reason?: string }) {
   const messages: Record<string, string> = {
     user_offline: 'Esse jogador saiu do salao.',
     challenge_already_exists: 'Voce ja desafiou esse jogador.',
-    challenge_not_found: 'Esse desafio nao esta mais disponivel.'
+    challenge_not_found: 'Esse desafio nao esta mais disponivel.',
+    invalid_time_control: 'Escolha um formato de tempo válido.'
   }
   errorMessage.value = messages[error.reason || ''] || 'Nao foi possivel concluir a acao.'
 }
@@ -142,7 +152,7 @@ async function logOut() {
           <article v-for="item in receivedChallenges" :key="item.id" class="player-row">
             <img v-if="avatarUrl(item.challenger)" class="avatar small" :src="avatarUrl(item.challenger) || ''" :alt="`Foto de ${item.challenger.nickname}`">
             <span v-else class="avatar small">{{ item.challenger.nickname.charAt(0).toUpperCase() }}</span>
-            <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(item.challenger.nickname)}`"><strong>{{ item.challenger.nickname }}</strong></NuxtLink><small>Rating {{ item.challenger.rating }} · 3 min</small></div>
+            <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(item.challenger.nickname)}`"><strong>{{ item.challenger.nickname }}</strong></NuxtLink><small>Rating {{ item.challenger.rating }} · {{ item.time_control.label }}</small></div>
             <div class="actions"><button class="accept" @click="accept(item.id)">Aceitar</button><button class="decline" @click="decline(item.id)">Recusar</button></div>
           </article>
         </div>
@@ -154,6 +164,12 @@ async function logOut() {
           <div><span class="eyebrow">ARENA</span><h2>Jogadores online</h2></div>
           <span>{{ opponents.length }} disponivel(is)</span>
         </div>
+        <label class="time-control">
+          <span>Formato do desafio</span>
+          <select v-model="selectedTimeControl">
+            <option v-for="control in timeControls" :key="control.id" :value="control.id">{{ control.label }}</option>
+          </select>
+        </label>
         <div v-if="opponents.length" class="online-grid">
           <article v-for="opponent in opponents" :key="opponent.id" class="online-card">
             <span class="online-dot" />
@@ -170,7 +186,7 @@ async function logOut() {
 
       <section v-if="sentChallenges.length" class="panel compact">
         <h2>Desafios enviados</h2>
-        <p v-for="item in sentChallenges" :key="item.id">Aguardando resposta de <strong>{{ item.challenged.nickname }}</strong>.</p>
+        <p v-for="item in sentChallenges" :key="item.id">Aguardando resposta de <strong>{{ item.challenged.nickname }}</strong> · {{ item.time_control.label }}.</p>
       </section>
     </div>
   </main>
@@ -192,5 +208,6 @@ button { padding: 0.7rem 1rem; color: var(--ink); background: #f7eedf; border: 1
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 1.2rem; }.section-heading > span { color: #8b7664; font-size: 0.85rem; }.eyebrow { display: inline-block; margin-bottom: 0.5rem; padding: 0.3rem 0.6rem; color: var(--brown); background: #ead7bc; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
 .list { display: grid; gap: 0.75rem; }.player-row, .online-card { display: flex; align-items: center; gap: 0.9rem; padding: 1rem; background: #efe3cf; border: 1px solid var(--line); border-radius: 14px; }.player-row > div:not(.actions), .online-card > div { display: grid; }.actions, .online-card button { margin-left: auto; }.accept { color: white; background: #67865a; }.decline { color: white; background: #bd5737; }
 .online-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }.online-card { position: relative; }.online-dot { position: absolute; top: 0.8rem; right: 0.8rem; }.empty { margin: 0; padding: 1.2rem; color: #8b7664; text-align: center; border: 1px dashed var(--line); border-radius: 12px; }.compact p { margin-bottom: 0; }.error { margin: 0; padding: 0.8rem 1rem; color: #9e3828; background: #f9ded5; border-radius: 10px; }
+.time-control { display: flex; align-items: center; justify-content: flex-end; gap: .7rem; margin: 0 0 1.2rem; color: #806d5d; font-size: .85rem; }.time-control select { padding: .65rem .8rem; color: var(--ink); background: #fffaf0; border: 1px solid var(--line); border-radius: 9px; font: inherit; }
 @media (max-width: 760px) { .lobby-shell { grid-template-columns: 1fr; }.sidebar { position: static; width: auto; height: auto; padding: 1rem; flex-direction: row; align-items: center; justify-content: space-between; border-right: 0; border-bottom: 1px solid var(--line); }.sidebar nav { display: none; }.mobile-hidden { display: none; }.content { padding: 1rem; }.welcome { align-items: flex-start; gap: 1rem; }.welcome > div:first-child p { display: none; }.profile > div { display: none; }.online-grid { grid-template-columns: 1fr; }.section-heading { align-items: flex-start; }.player-row { flex-wrap: wrap; }.actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }.actions button { width: 100%; } }
 </style>

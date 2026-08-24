@@ -9,30 +9,41 @@ defmodule ChessDuelBackend.Games.GameServer do
   require Logger
 
   @initial_fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-  # Pode ser sobrescrito com config :chess_duel_backend, :game_clock_initial_ms
-  # para testes manuais curtos. O padrao permanece 3 minutos por jogador.
+  # Fallback para partidas iniciadas fora do lobby e para testes manuais curtos.
   @default_initial_time_ms 180_000
   @default_abandonment_grace_ms 60_000
 
-  def start_link(game_id) do
+  def start_link(game_id) when is_binary(game_id) do
     GenServer.start_link(__MODULE__, game_id, name: via_tuple(game_id))
   end
 
+  def start_link({game_id, time_control}) do
+    GenServer.start_link(__MODULE__, {game_id, time_control}, name: via_tuple(game_id))
+  end
+
   def child_spec(game_id) do
+    {id, start_arg} =
+      case game_id do
+        {id, _time_control} = args -> {id, args}
+        id -> {id, id}
+      end
+
     %{
-      id: {__MODULE__, game_id},
-      start: {__MODULE__, :start_link, [game_id]},
+      id: {__MODULE__, id},
+      start: {__MODULE__, :start_link, [start_arg]},
       restart: :transient
     }
   end
 
-  def start_or_get(game_id) when is_binary(game_id) do
+  def start_or_get(game_id, time_control \\ nil) when is_binary(game_id) do
     case Registry.lookup(GameRegistry, game_id) do
       [{pid, _value}] ->
         {:ok, pid}
 
       [] ->
-        case DynamicSupervisor.start_child(GameSupervisor, {__MODULE__, game_id}) do
+        child_arg = if time_control, do: {game_id, time_control}, else: game_id
+
+        case DynamicSupervisor.start_child(GameSupervisor, {__MODULE__, child_arg}) do
           {:ok, pid} -> {:ok, pid}
           {:error, {:already_started, pid}} -> {:ok, pid}
           other -> other
@@ -57,7 +68,11 @@ defmodule ChessDuelBackend.Games.GameServer do
   end
 
   def reserve_players(game_id, white_player_id, black_player_id) do
-    with {:ok, pid} <- start_or_get(game_id) do
+    reserve_players(game_id, white_player_id, black_player_id, nil)
+  end
+
+  def reserve_players(game_id, white_player_id, black_player_id, time_control) do
+    with {:ok, pid} <- start_or_get(game_id, time_control) do
       GenServer.call(pid, {:reserve_players, white_player_id, black_player_id})
     end
   end
@@ -75,13 +90,20 @@ defmodule ChessDuelBackend.Games.GameServer do
   end
 
   @impl true
-  def init(game_id) do
-    initial_time_ms =
+  def init(game_id) when is_binary(game_id), do: init({game_id, nil})
+
+  def init({game_id, time_control}) do
+    configured_initial_time_ms =
       Application.get_env(
         :chess_duel_backend,
         :game_clock_initial_ms,
         @default_initial_time_ms
       )
+
+    initial_time_ms =
+      if time_control, do: time_control.initial_time_ms, else: configured_initial_time_ms
+
+    increment_ms = if time_control, do: time_control.increment_ms, else: 0
 
     abandonment_grace_ms =
       Application.get_env(
@@ -109,6 +131,8 @@ defmodule ChessDuelBackend.Games.GameServer do
       is_draw: false,
       white_time_remaining_ms: initial_time_ms,
       black_time_remaining_ms: initial_time_ms,
+      initial_time_ms: initial_time_ms,
+      increment_ms: increment_ms,
       turn_started_at: nil,
       clock_timer_ref: nil,
       persistence_pid: nil
@@ -254,6 +278,7 @@ defmodule ChessDuelBackend.Games.GameServer do
 
             new_state =
               clock_state
+              |> add_increment(state.current_turn)
               |> Map.merge(%{
                 moves: state.moves ++ [move],
                 current_turn: next_turn,
@@ -315,6 +340,11 @@ defmodule ChessDuelBackend.Games.GameServer do
     updated_state = Map.put(state, time_key, remaining_ms)
 
     if remaining_ms == 0, do: {:expired, updated_state}, else: {:ok, updated_state}
+  end
+
+  defp add_increment(state, color) do
+    time_key = time_key(color)
+    Map.update!(state, time_key, &(&1 + state.increment_ms))
   end
 
   defp snapshot_clock(state, now \\ System.monotonic_time(:millisecond)) do
@@ -497,7 +527,9 @@ defmodule ChessDuelBackend.Games.GameServer do
       moves: state.moves,
       final_fen: state.fen,
       white_time_remaining_ms: state.white_time_remaining_ms,
-      black_time_remaining_ms: state.black_time_remaining_ms
+      black_time_remaining_ms: state.black_time_remaining_ms,
+      initial_time_ms: state.initial_time_ms,
+      increment_ms: state.increment_ms
     }
 
     if state.status == "finished" do
@@ -597,7 +629,9 @@ defmodule ChessDuelBackend.Games.GameServer do
         is_stalemate: game.end_reason == "stalemate",
         is_draw: game.end_reason == "draw",
         white_time_remaining_ms: game.white_time_remaining_ms || state.white_time_remaining_ms,
-        black_time_remaining_ms: game.black_time_remaining_ms || state.black_time_remaining_ms
+        black_time_remaining_ms: game.black_time_remaining_ms || state.black_time_remaining_ms,
+        initial_time_ms: game.initial_time_ms || state.initial_time_ms,
+        increment_ms: game.increment_ms || state.increment_ms
     }
   end
 

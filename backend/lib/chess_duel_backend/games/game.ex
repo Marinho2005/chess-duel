@@ -18,6 +18,8 @@ defmodule ChessDuelBackend.Games.Game do
     field :end_reason, :string
     field :white_time_remaining_ms, :integer
     field :black_time_remaining_ms, :integer
+    field :initial_time_ms, :integer, default: 180_000
+    field :increment_ms, :integer, default: 0
     field :finished_at, :utc_datetime
     field :rated_at, :utc_datetime
     field :white_rating_before, :integer
@@ -45,6 +47,8 @@ defmodule ChessDuelBackend.Games.Game do
       :end_reason,
       :white_time_remaining_ms,
       :black_time_remaining_ms,
+      :initial_time_ms,
+      :increment_ms,
       :finished_at
     ])
     |> validate_required([:game_id, :status, :board_state, :current_turn])
@@ -52,6 +56,8 @@ defmodule ChessDuelBackend.Games.Game do
     |> validate_inclusion(:current_turn, ~w(white black))
     |> validate_inclusion(:result, ~w(white_wins black_wins draw abandoned))
     |> validate_inclusion(:end_reason, ~w(checkmate timeout stalemate draw abandonment))
+    |> validate_number(:initial_time_ms, greater_than: 0)
+    |> validate_number(:increment_ms, greater_than_or_equal_to: 0)
     |> unique_constraint(:game_id)
   end
 

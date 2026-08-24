@@ -1,15 +1,19 @@
 defmodule ChessDuelBackend.Games.Lobby do
   use GenServer
 
-  alias ChessDuelBackend.Games.GameServer
+  alias ChessDuelBackend.Games.{GameServer, TimeControl}
 
   def start_link(_opts), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
   def connect(user), do: GenServer.call(__MODULE__, {:connect, user})
   def disconnect(user_id), do: GenServer.call(__MODULE__, {:disconnect, user_id})
 
-  def create_challenge(challenger_id, challenged_id),
-    do: GenServer.call(__MODULE__, {:create_challenge, challenger_id, challenged_id})
+  def create_challenge(challenger_id, challenged_id, time_control_id \\ TimeControl.default().id),
+    do:
+      GenServer.call(
+        __MODULE__,
+        {:create_challenge, challenger_id, challenged_id, time_control_id}
+      )
 
   def accept_challenge(challenge_id, user_id),
     do: GenServer.call(__MODULE__, {:accept_challenge, challenge_id, user_id})
@@ -54,18 +58,24 @@ defmodule ChessDuelBackend.Games.Lobby do
     {:reply, snapshot(state), state}
   end
 
-  def handle_call({:create_challenge, user_id, user_id}, _from, state) do
+  def handle_call({:create_challenge, user_id, user_id, _time_control_id}, _from, state) do
     {:reply, {:error, :cannot_challenge_yourself}, state}
   end
 
-  def handle_call({:create_challenge, challenger_id, challenged_id}, _from, state) do
+  def handle_call(
+        {:create_challenge, challenger_id, challenged_id, time_control_id},
+        _from,
+        state
+      ) do
     with {:ok, challenger} <- fetch_online_user(state, challenger_id),
          {:ok, challenged} <- fetch_online_user(state, challenged_id),
+         {:ok, time_control} <- TimeControl.fetch(time_control_id),
          false <- challenge_exists?(state, challenger_id, challenged_id) do
       challenge = %{
         id: Ecto.UUID.generate(),
         challenger: public_user(challenger),
-        challenged: public_user(challenged)
+        challenged: public_user(challenged),
+        time_control: time_control
       }
 
       state = put_in(state.challenges[challenge.id], challenge)
@@ -81,14 +91,20 @@ defmodule ChessDuelBackend.Games.Lobby do
       {:ok, %{challenged: %{id: ^user_id}} = challenge} ->
         game_id = Ecto.UUID.generate()
 
-        case GameServer.reserve_players(game_id, challenge.challenger.id, challenge.challenged.id) do
+        case GameServer.reserve_players(
+               game_id,
+               challenge.challenger.id,
+               challenge.challenged.id,
+               challenge.time_control
+             ) do
           {:ok, _game_state} ->
             state = update_in(state.challenges, &Map.delete(&1, challenge_id))
 
             game = %{
               game_id: game_id,
               white_player: challenge.challenger,
-              black_player: challenge.challenged
+              black_player: challenge.challenged,
+              time_control: challenge.time_control
             }
 
             {:reply, {:ok, game, snapshot(state)}, state}

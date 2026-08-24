@@ -10,6 +10,7 @@ type GameHistoryItem = {
   result: 'win' | 'loss' | 'draw'
   end_reason: string | null
   rating_change: number | null
+  time_control: { id: string; label: string; initial_time_ms: number; increment_ms: number }
   finished_at: string
 }
 
@@ -114,7 +115,7 @@ function ratingLabel(change: number | null) {
           <div>
             <small>Contra</small>
             <NuxtLink :to="`/profile/${encodeURIComponent(game.opponent.nickname)}`">{{ game.opponent.nickname }}</NuxtLink>
-            <span>{{ colorLabels[game.color] }} · {{ reasonLabels[game.end_reason || ''] || game.end_reason || 'Motivo não informado' }}</span>
+            <span>{{ colorLabels[game.color] }} · {{ game.time_control.label }} · {{ reasonLabels[game.end_reason || ''] || game.end_reason || 'Motivo não informado' }}</span>
           </div>
         </div>
         <div class="details">
