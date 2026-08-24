@@ -9,6 +9,7 @@ defmodule ChessDuelBackend.Accounts.UserToken do
   # It is very important to keep the magic link token expiry short,
   # since someone with access to the email may take over the account.
   @magic_link_validity_in_minutes 15
+  @confirmation_validity_in_days 1
   @change_email_validity_in_days 7
   @session_validity_in_days 14
   @api_token_validity_in_days 14
@@ -72,6 +73,7 @@ defmodule ChessDuelBackend.Accounts.UserToken do
         from token in by_token_and_context_query(hashed_token, "api"),
           join: user in assoc(token, :user),
           where: token.inserted_at > ago(@api_token_validity_in_days, "day"),
+          where: not is_nil(user.confirmed_at),
           select: {%{user | authenticated_at: token.authenticated_at}, token.inserted_at}
 
       {:ok, query}
@@ -122,6 +124,27 @@ defmodule ChessDuelBackend.Accounts.UserToken do
   """
   def build_email_token(user, context) do
     build_hashed_token(user, context, user.email)
+  end
+
+  def build_confirmation_token(user) do
+    build_hashed_token(user, "confirm", user.email)
+  end
+
+  def verify_confirmation_token_query(token) do
+    with {:ok, decoded_token} <- Base.url_decode64(token, padding: false) do
+      hashed_token = :crypto.hash(@hash_algorithm, decoded_token)
+
+      query =
+        from token in by_token_and_context_query(hashed_token, "confirm"),
+          join: user in assoc(token, :user),
+          where: token.inserted_at > ago(@confirmation_validity_in_days, "day"),
+          where: token.sent_to == user.email,
+          select: {user, token}
+
+      {:ok, query}
+    else
+      :error -> :error
+    end
   end
 
   defp build_hashed_token(user, context, sent_to) do

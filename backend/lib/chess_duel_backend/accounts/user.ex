@@ -57,8 +57,8 @@ defmodule ChessDuelBackend.Accounts.User do
     field = :google_id
 
     user
-    |> change(%{field => uid})
-    |> validate_required([field])
+    |> change(%{field => uid, confirmed_at: NaiveDateTime.utc_now(:second)})
+    |> validate_required([field, :confirmed_at])
     |> oauth_constraints()
   end
 

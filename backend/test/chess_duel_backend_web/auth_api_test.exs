@@ -2,8 +2,10 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
   use ChessDuelBackendWeb.ConnCase, async: true
 
   alias ChessDuelBackend.Accounts.AvatarStorage
+  alias ChessDuelBackend.{Accounts, Repo}
+  alias ChessDuelBackend.Accounts.{User, UserToken}
 
-  test "cadastro, me e logout usam bearer token revogavel", %{conn: conn} do
+  test "cadastro exige confirmacao antes de login, me e logout usam token revogavel", %{conn: conn} do
     register_conn =
       post(conn, "/api/users/register", %{
         "user" => %{
@@ -13,16 +15,35 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
         }
       })
 
-    %{"token" => token, "user" => user} = json_response(register_conn, 201)
-    assert user["nickname"] == "api_player"
-    assert user["rating"] == 1200
+    assert %{
+             "status" => "pending_confirmation",
+             "message" => "Verifique seu email para confirmar sua conta antes de fazer login."
+           } =
+             json_response(register_conn, 201)
+
+    assert %{"error" => "email_not_confirmed"} =
+             conn
+             |> post("/api/users/log_in", %{
+               "user" => %{"email" => "api@example.com", "password" => "password1234"}
+             })
+             |> json_response(403)
+
+    user = Accounts.get_user_by_email("api@example.com")
+    confirm_user!(user)
+
+    %{"token" => token, "user" => logged_user} =
+      build_conn()
+      |> post("/api/users/log_in", %{
+        "user" => %{"email" => "api@example.com", "password" => "password1234"}
+      })
+      |> json_response(200)
 
     authenticated_conn = put_req_header(build_conn(), "authorization", "Bearer #{token}")
 
     assert %{"user" => %{"id" => user_id}} =
              json_response(get(authenticated_conn, "/api/users/me"), 200)
 
-    assert user_id == user["id"]
+    assert user_id == logged_user["id"]
 
     assert response(delete(authenticated_conn, "/api/users/log_out"), 204)
 
@@ -39,13 +60,15 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
       "password" => "password1234"
     }
 
-    assert %{"token" => _token} =
+    assert %{"status" => "pending_confirmation"} =
              json_response(post(conn, "/api/users/register", %{"user" => attrs}), 201)
 
     assert %{"error" => "invalid_email_or_password"} =
              conn
              |> post("/api/users/log_in", %{"user" => %{attrs | "password" => "wrong-password"}})
              |> json_response(401)
+
+    confirm_user!(Accounts.get_user_by_email(attrs["email"]))
 
     assert %{"token" => token} =
              build_conn()
@@ -59,17 +82,14 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
     assert %{"error" => "authentication_required"} = json_response(get(conn, "/api/users/me"), 401)
   end
 
-  test "perfil publico nao expoe email e somente o dono pode editar", %{conn: conn} do
+  test "perfil publico nao expoe email e somente o dono pode editar" do
     attrs = %{
       "email" => "public@example.com",
       "nickname" => "public_player",
       "password" => "password1234"
     }
 
-    %{"token" => token} =
-      conn
-      |> post("/api/users/register", %{"user" => attrs})
-      |> json_response(201)
+    token = register_confirmed_token!(attrs)
 
     %{"profile" => profile} =
       build_conn()
@@ -100,17 +120,14 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
     assert updated_user["rating"] == 1200
   end
 
-  test "usuario autenticado envia avatar valido e ele aparece no perfil publico", %{conn: conn} do
+  test "usuario autenticado envia avatar valido e ele aparece no perfil publico" do
     attrs = %{
       "email" => "avatar@example.com",
       "nickname" => "avatar_player",
       "password" => "password1234"
     }
 
-    %{"token" => token} =
-      conn
-      |> post("/api/users/register", %{"user" => attrs})
-      |> json_response(201)
+    token = register_confirmed_token!(attrs)
 
     temporary_path = Path.join(System.tmp_dir!(), "avatar-#{Ecto.UUID.generate()}.png")
     File.write!(temporary_path, <<0x89, "PNG\r\n", 0x1A, "\n", "test-image">>)
@@ -140,17 +157,14 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
     assert profile["avatar_url"] == user["avatar_url"]
   end
 
-  test "upload de avatar rejeita arquivo que nao e imagem", %{conn: conn} do
+  test "upload de avatar rejeita arquivo que nao e imagem" do
     attrs = %{
       "email" => "invalid-avatar@example.com",
       "nickname" => "invalid_avatar",
       "password" => "password1234"
     }
 
-    %{"token" => token} =
-      conn
-      |> post("/api/users/register", %{"user" => attrs})
-      |> json_response(201)
+    token = register_confirmed_token!(attrs)
 
     temporary_path = Path.join(System.tmp_dir!(), "avatar-#{Ecto.UUID.generate()}.txt")
     File.write!(temporary_path, "isto nao e uma imagem")
@@ -163,5 +177,41 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
              authenticated_conn
              |> post("/api/users/me/avatar", %{"avatar" => upload})
              |> json_response(422)
+  end
+
+  test "confirma email com token valido e rejeita reutilizacao", %{conn: conn} do
+    {:ok, user} =
+      Accounts.register_user(%{
+        email: "confirmation@example.com",
+        nickname: "confirmation_player",
+        password: "password1234"
+      })
+
+    {encoded_token, user_token} = UserToken.build_confirmation_token(user)
+    Repo.insert!(user_token)
+
+    assert %{"status" => "confirmed"} =
+             conn
+             |> post("/api/users/confirm/#{encoded_token}")
+             |> json_response(200)
+
+    assert Accounts.get_user!(user.id).confirmed_at
+
+    assert %{"error" => "invalid_or_expired_confirmation_token"} =
+             build_conn()
+             |> post("/api/users/confirm/#{encoded_token}")
+             |> json_response(422)
+  end
+
+  defp register_confirmed_token!(attrs) do
+    {:ok, user} = Accounts.register_user(attrs)
+    user = confirm_user!(user)
+    Accounts.generate_user_api_token(user)
+  end
+
+  defp confirm_user!(user) do
+    user
+    |> User.confirm_changeset()
+    |> Repo.update!()
   end
 end

@@ -80,6 +80,7 @@ defmodule ChessDuelBackend.AccountsTest do
     assert google_user.id == local_user.id
     assert google_user.google_id == "google-linked"
     assert google_user.hashed_password == local_user.hashed_password
+    assert google_user.confirmed_at
   end
 
   test "authenticate_oauth_user/2 gera sufixo para nickname repetido e exige email" do
