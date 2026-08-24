@@ -36,6 +36,7 @@ defmodule ChessDuelBackendWeb.Router do
 
     delete "/users/log_out", UserSessionController, :delete
     get "/users/me", UserController, :me
+    get "/users/me/games", GameHistoryController, :index
     patch "/users/me", UserController, :update
     post "/users/me/avatar", UserController, :update_avatar
   end
