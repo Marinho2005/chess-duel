@@ -30,7 +30,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - Contextos seguem a convenção Phoenix: pasta com nome do domínio (ex: `games/`), schemas dentro dela (ex: `games/game.ex`)
 - NÃO mexer no contexto `Blog`/`ArticleController` de exemplo, gerado durante o aprendizado inicial do framework — não faz parte do produto
 - Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), a partir da `develop`, nunca commitada direto na `develop` ou `main`
-- Página `frontend/pages/test-game.vue` é uma página de TESTE MANUAL temporária, não é a UI final do produto — serve para validar mecanismos de backend antes de construir a interface real com tabuleiro visual (chessground, planejado para a etapa de UI real, ainda não agendada no roadmap abaixo)
+- A interface oficial das partidas fica em `frontend/pages/game/[gameId].vue`; a antiga página manual `test-game.vue` foi removida após a validação da UI real.
 - O projeto tem duas pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento de outra branch; sempre `git pull` na `develop` antes de criar uma branch nova
 
 ---
@@ -95,7 +95,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 
 ### Fora do roadmap numerado, mas necessária em algum momento
 
-- [x] **UI real de jogo** — Rota `/game/:gameId` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; `test-game.vue` preservada apenas para diagnóstico.
+- [x] **UI real de jogo** — Rota `/game/:gameId` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [ ] **Dockerização completa** — Hoje o `docker-compose.yml` só sobe Postgres e Valkey; backend e frontend rodam localmente via `mix phx.server`/`npm run dev`. Dockerizar tudo faz sentido perto do momento de deploy, ou para padronizar o ambiente entre os dois desenvolvedores do projeto.
 
 ---
