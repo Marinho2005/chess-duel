@@ -40,7 +40,9 @@ defmodule ChessDuelBackend.MixProject do
       {:redix, "~> 1.5"},
       {:cors_plug, "~> 3.0"},
       {:jason, "~> 1.4"},
-      {:plug_cowboy, "~> 2.7"}
+      {:plug_cowboy, "~> 2.7"},
+      {:ueberauth, "~> 0.10"},
+      {:ueberauth_google, "~> 0.10"}
     ]
   end
 

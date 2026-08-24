@@ -14,9 +14,10 @@ const profile = ref<PublicProfile | null>(null)
 const loading = ref(true)
 const notFound = ref(false)
 
-const avatarUrl = computed(() => profile.value?.avatar_url
-  ? `${config.public.api.baseURL.replace(/\/$/, '')}${profile.value.avatar_url}`
-  : null)
+const avatarUrl = computed(() => resolveAvatarUrl(
+  profile.value?.avatar_url,
+  config.public.api.baseURL
+))
 
 onMounted(loadProfile)
 watch(() => route.params.nickname, loadProfile)

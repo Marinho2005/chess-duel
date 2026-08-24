@@ -5,8 +5,13 @@ config :bcrypt_elixir, :log_rounds, 1
 
 # Configure your database
 database_url =
-  System.get_env("DATABASE_URL") ||
-    "ecto://#{System.get_env("DB_USER", "chess_duel")}:#{System.get_env("DB_PASSWORD", "chess_duel_password")}@#{System.get_env("DB_HOST", "localhost")}:#{System.get_env("DB_PORT", "5432")}/chess_duel_test#{System.get_env("MIX_TEST_PARTITION")}"
+  case System.get_env("DATABASE_URL") do
+    value when is_binary(value) and value != "" ->
+      value
+
+    _ ->
+      "ecto://#{System.get_env("DB_USER", "chess_duel")}:#{System.get_env("DB_PASSWORD", "chess_duel_password")}@#{System.get_env("DB_HOST", "localhost")}:#{System.get_env("DB_PORT", "5432")}/chess_duel_test#{System.get_env("MIX_TEST_PARTITION")}"
+  end
 
 config :chess_duel_backend, ChessDuelBackend.Repo,
   url: database_url,

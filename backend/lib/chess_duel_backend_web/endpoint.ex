@@ -32,6 +32,7 @@ defmodule ChessDuelBackendWeb.Endpoint do
 
   plug Plug.MethodOverride
   plug Plug.Head
+  plug Plug.Session, @session_options
 
   plug ChessDuelBackendWeb.Router
 end

@@ -91,9 +91,7 @@ function challengeSentTo(userId: string) {
 }
 
 function avatarUrl(user: LobbyUser | null | undefined) {
-  return user?.avatar_url
-    ? `${config.public.api.baseURL.replace(/\/$/, '')}${user.avatar_url}`
-    : null
+  return resolveAvatarUrl(user?.avatar_url, config.public.api.baseURL)
 }
 
 async function logOut() {
