@@ -25,6 +25,10 @@ defmodule ChessDuelBackendWeb.Endpoint do
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
+  if code_reloading? do
+    plug Phoenix.CodeReloader
+  end
+
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
