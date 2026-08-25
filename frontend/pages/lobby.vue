@@ -22,10 +22,13 @@ const challenges = ref<Challenge[]>([])
 const status = ref('Conectando ao salao...')
 const errorMessage = ref('')
 const selectedTimeControl = ref<(typeof timeControls)[number]['id']>('blitz_3_0')
+const searchingMatch = ref(false)
+const matchmakingMessage = ref('')
 const config = useRuntimeConfig()
 
 let socket: Socket | null = null
 let channel: Channel | null = null
+let matchmakingChannel: Channel | null = null
 
 const opponents = computed(() => users.value.filter(user => user.id !== auth.user?.id))
 const receivedChallenges = computed(() => challenges.value.filter(item => item.challenged.id === auth.user?.id))
@@ -38,6 +41,9 @@ onMounted(async () => {
     await navigateTo('/')
     return
   }
+
+  const currentUser = auth.user
+  if (!currentUser) return
 
   const backendUrl = useRuntimeConfig().public.api.baseURL
   const websocketUrl = `${backendUrl.replace(/^http/, 'ws').replace(/\/$/, '')}/socket`
@@ -56,10 +62,31 @@ onMounted(async () => {
     }
   })
 
+  matchmakingChannel = socket.channel(`matchmaking:${currentUser.id}`, {})
+  matchmakingChannel.join()
+    .receive('error', () => { errorMessage.value = 'Não foi possível acessar o matchmaking.' })
+
+  matchmakingChannel.on('match_found', async (game: AcceptedGame) => {
+    searchingMatch.value = false
+    matchmakingMessage.value = 'Partida encontrada!'
+    await navigateTo(`/game/${game.game_id}`)
+  })
+  matchmakingChannel.on('queue_waiting', (payload: { message?: string }) => {
+    matchmakingMessage.value = payload.message || 'A busca continua com uma faixa maior de rating.'
+  })
+
   socket.onError(() => { status.value = 'Reconectando...' })
+  socket.onClose(() => {
+    if (searchingMatch.value) {
+      searchingMatch.value = false
+      matchmakingMessage.value = 'Busca cancelada pela desconexão.'
+    }
+  })
 })
 
 onBeforeUnmount(() => {
+  if (searchingMatch.value) matchmakingChannel?.push('leave_queue', {})
+  matchmakingChannel?.leave()
   channel?.leave()
   socket?.disconnect()
 })
@@ -73,6 +100,26 @@ function applyLobbyState(state: LobbyState) {
 
 function challenge(userId: string) {
   channel?.push('challenge', { user_id: userId, time_control: selectedTimeControl.value })
+    .receive('error', showChannelError)
+}
+
+function startMatchmaking() {
+  if (!matchmakingChannel || searchingMatch.value) return
+
+  errorMessage.value = ''
+  matchmakingMessage.value = 'Procurando um oponente com rating próximo...'
+
+  matchmakingChannel.push('join_queue', { time_control: selectedTimeControl.value })
+    .receive('ok', () => { searchingMatch.value = true })
+    .receive('error', showChannelError)
+}
+
+function cancelMatchmaking() {
+  matchmakingChannel?.push('leave_queue', {})
+    .receive('ok', () => {
+      searchingMatch.value = false
+      matchmakingMessage.value = ''
+    })
     .receive('error', showChannelError)
 }
 
@@ -91,7 +138,8 @@ function showChannelError(error: { reason?: string }) {
     user_offline: 'Esse jogador saiu do salao.',
     challenge_already_exists: 'Voce ja desafiou esse jogador.',
     challenge_not_found: 'Esse desafio nao esta mais disponivel.',
-    invalid_time_control: 'Escolha um formato de tempo válido.'
+    invalid_time_control: 'Escolha um formato de tempo válido.',
+    queue_unavailable: 'A fila está indisponível no momento.'
   }
   errorMessage.value = messages[error.reason || ''] || 'Nao foi possivel concluir a acao.'
 }
@@ -143,6 +191,23 @@ async function logOut() {
       <p class="connection"><span /> {{ status }}</p>
       <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
+      <section class="panel matchmaking-panel">
+        <div>
+          <span class="eyebrow">MATCHMAKING</span>
+          <h2>Buscar partida automaticamente</h2>
+          <p>Encontre um adversário com rating próximo ao seu.</p>
+        </div>
+        <label class="time-control">
+          <span>Formato</span>
+          <select v-model="selectedTimeControl" :disabled="searchingMatch">
+            <option v-for="control in timeControls" :key="control.id" :value="control.id">{{ control.label }}</option>
+          </select>
+        </label>
+        <button v-if="!searchingMatch" class="search" type="button" @click="startMatchmaking">Buscar partida</button>
+        <button v-else class="cancel-search" type="button" @click="cancelMatchmaking">Cancelar busca</button>
+        <p v-if="matchmakingMessage" class="search-status"><span />{{ matchmakingMessage }}</p>
+      </section>
+
       <section class="panel">
         <div class="section-heading">
           <div><span class="eyebrow">CONVITES</span><h2>Desafios recebidos</h2></div>
@@ -153,7 +218,7 @@ async function logOut() {
             <img v-if="avatarUrl(item.challenger)" class="avatar small" :src="avatarUrl(item.challenger) || ''" :alt="`Foto de ${item.challenger.nickname}`">
             <span v-else class="avatar small">{{ item.challenger.nickname.charAt(0).toUpperCase() }}</span>
             <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(item.challenger.nickname)}`"><strong>{{ item.challenger.nickname }}</strong></NuxtLink><small>Rating {{ item.challenger.rating }} · {{ item.time_control.label }}</small></div>
-            <div class="actions"><button class="accept" @click="accept(item.id)">Aceitar</button><button class="decline" @click="decline(item.id)">Recusar</button></div>
+            <div class="actions"><button class="accept" :disabled="searchingMatch" @click="accept(item.id)">Aceitar</button><button class="decline" @click="decline(item.id)">Recusar</button></div>
           </article>
         </div>
         <p v-else class="empty">Nenhum desafio recebido por enquanto.</p>
@@ -164,19 +229,13 @@ async function logOut() {
           <div><span class="eyebrow">ARENA</span><h2>Jogadores online</h2></div>
           <span>{{ opponents.length }} disponivel(is)</span>
         </div>
-        <label class="time-control">
-          <span>Formato do desafio</span>
-          <select v-model="selectedTimeControl">
-            <option v-for="control in timeControls" :key="control.id" :value="control.id">{{ control.label }}</option>
-          </select>
-        </label>
         <div v-if="opponents.length" class="online-grid">
           <article v-for="opponent in opponents" :key="opponent.id" class="online-card">
             <span class="online-dot" />
             <img v-if="avatarUrl(opponent)" class="avatar small" :src="avatarUrl(opponent) || ''" :alt="`Foto de ${opponent.nickname}`">
             <span v-else class="avatar small">{{ opponent.nickname.charAt(0).toUpperCase() }}</span>
             <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(opponent.nickname)}`"><strong>{{ opponent.nickname }}</strong></NuxtLink><small>Rating {{ opponent.rating }}</small></div>
-            <button :disabled="challengeSentTo(opponent.id)" @click="challenge(opponent.id)">
+            <button :disabled="searchingMatch || challengeSentTo(opponent.id)" @click="challenge(opponent.id)">
               {{ challengeSentTo(opponent.id) ? 'Aguardando' : 'Desafiar' }}
             </button>
           </article>
@@ -209,5 +268,6 @@ button { padding: 0.7rem 1rem; color: var(--ink); background: #f7eedf; border: 1
 .list { display: grid; gap: 0.75rem; }.player-row, .online-card { display: flex; align-items: center; gap: 0.9rem; padding: 1rem; background: #efe3cf; border: 1px solid var(--line); border-radius: 14px; }.player-row > div:not(.actions), .online-card > div { display: grid; }.actions, .online-card button { margin-left: auto; }.accept { color: white; background: #67865a; }.decline { color: white; background: #bd5737; }
 .online-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }.online-card { position: relative; }.online-dot { position: absolute; top: 0.8rem; right: 0.8rem; }.empty { margin: 0; padding: 1.2rem; color: #8b7664; text-align: center; border: 1px dashed var(--line); border-radius: 12px; }.compact p { margin-bottom: 0; }.error { margin: 0; padding: 0.8rem 1rem; color: #9e3828; background: #f9ded5; border-radius: 10px; }
 .time-control { display: flex; align-items: center; justify-content: flex-end; gap: .7rem; margin: 0 0 1.2rem; color: #806d5d; font-size: .85rem; }.time-control select { padding: .65rem .8rem; color: var(--ink); background: #fffaf0; border: 1px solid var(--line); border-radius: 9px; font: inherit; }
-@media (max-width: 760px) { .lobby-shell { grid-template-columns: 1fr; }.sidebar { position: static; width: auto; height: auto; padding: 1rem; flex-direction: row; align-items: center; justify-content: space-between; border-right: 0; border-bottom: 1px solid var(--line); }.sidebar nav { display: none; }.mobile-hidden { display: none; }.content { padding: 1rem; }.welcome { align-items: flex-start; gap: 1rem; }.welcome > div:first-child p { display: none; }.profile > div { display: none; }.online-grid { grid-template-columns: 1fr; }.section-heading { align-items: flex-start; }.player-row { flex-wrap: wrap; }.actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }.actions button { width: 100%; } }
+.matchmaking-panel { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1rem; }.matchmaking-panel p { margin: .35rem 0 0; color: #857060; }.matchmaking-panel .time-control { margin: 0; }.search { color: white; font-weight: 700; background: var(--brown); }.cancel-search { color: white; font-weight: 700; background: #a74c35; }.search-status { display: flex; grid-column: 1 / -1; align-items: center; gap: .5rem; padding-top: .8rem; border-top: 1px solid var(--line); }.search-status span { width: 9px; height: 9px; background: #668a57; border-radius: 50%; box-shadow: 0 0 8px #668a57; animation: pulse 1.2s infinite; }@keyframes pulse { 50% { opacity: .35; transform: scale(.8); } }
+@media (max-width: 760px) { .lobby-shell { grid-template-columns: 1fr; }.sidebar { position: static; width: auto; height: auto; padding: 1rem; flex-direction: row; align-items: center; justify-content: space-between; border-right: 0; border-bottom: 1px solid var(--line); }.sidebar nav { display: none; }.mobile-hidden { display: none; }.content { padding: 1rem; }.welcome { align-items: flex-start; gap: 1rem; }.welcome > div:first-child p { display: none; }.profile > div { display: none; }.matchmaking-panel { grid-template-columns: 1fr; }.matchmaking-panel .time-control { justify-content: stretch; }.matchmaking-panel select { flex: 1; }.online-grid { grid-template-columns: 1fr; }.section-heading { align-items: flex-start; }.player-row { flex-wrap: wrap; }.actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }.actions button { width: 100%; } }
 </style>

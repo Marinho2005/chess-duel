@@ -8,6 +8,7 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   alias ChessDuelBackend.Repo
   alias ChessDuelBackend.Games.GameServer
   alias ChessDuelBackendWeb.GameChannel
+  alias ChessDuelBackendWeb.MatchmakingChannel
   alias ChessDuelBackendWeb.UserSocket
 
   test "aceita token valido e associa o id real do usuario" do
@@ -29,6 +30,35 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   test "recusa token ausente ou invalido" do
     assert :error = Phoenix.ChannelTest.connect(UserSocket, %{})
     assert :error = Phoenix.ChannelTest.connect(UserSocket, %{"token" => "invalid"})
+  end
+
+  test "MatchmakingChannel aceita somente o topico do usuario autenticado" do
+    user = register_user("matchmaking-socket@example.com", "matchmaking_socket")
+
+    {:ok, socket} =
+      Phoenix.ChannelTest.connect(UserSocket, %{
+        "token" => Accounts.generate_user_api_token(user)
+      })
+
+    assert {:error, %{reason: "unauthorized"}} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               socket,
+               MatchmakingChannel,
+               "matchmaking:outro-usuario"
+             )
+
+    assert {:ok, _reply, channel} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               socket,
+               MatchmakingChannel,
+               "matchmaking:#{user.id}"
+             )
+
+    ref = Phoenix.ChannelTest.push(channel, "join_queue", %{"time_control" => "blitz_3_0"})
+    Phoenix.ChannelTest.assert_reply(ref, :ok, %{time_control: %{id: "blitz_3_0"}})
+
+    ref = Phoenix.ChannelTest.push(channel, "leave_queue", %{})
+    Phoenix.ChannelTest.assert_reply(ref, :ok)
   end
 
   test "GameChannel usa ids reais e preserva a cor na reconexao" do

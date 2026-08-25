@@ -69,7 +69,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 
 ### Fase 3 — Matchmaking sério
 
-- [ ] **3.1 Fila por rating** — Sistema de fila que pareia jogadores de rating parecido.
+- [x] **3.1 Fila por rating** — Fila por formato no Valkey, com pareamento periódico por proximidade de rating, tolerância crescente e entrada/cancelamento pelo lobby em tempo real.
 - [x] **3.2 Tempo configurável** — Bullet 1+0, Blitz 3+0, Blitz 5+3 e Rapid 10+0 selecionáveis nos desafios; tempo inicial e incremento Fischer são autoritativos no `GameServer` e persistidos por partida.
 - [ ] **3.3 Salas privadas** — Criação de sala com link de convite, para jogar com amigos sem passar pela fila de matchmaking.
 
