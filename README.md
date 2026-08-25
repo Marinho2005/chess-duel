@@ -52,6 +52,7 @@ docker compose ps      # confira que os dois serviços estão healthy
 
 ```bash
 cd backend
+set -a && source ../.env && set +a
 mix deps.get
 mix ecto.create
 mix ecto.migrate
@@ -110,6 +111,10 @@ chess_duel/
 Existe um `.env.example` na raiz com as variáveis usadas pelo Docker Compose, backend e frontend (`DATABASE_URL`/`DB_*`, `VALKEY_URL`, `NUXT_PUBLIC_API_URL`, etc.).
 
 Copie para `.env` e edite conforme sua máquina. ⚠️ **Nunca commite o `.env` real** — ele está no `.gitignore`. Apenas o `.env.example` (sem segredos) vai para o repositório.
+
+Para testar o login social, crie uma aplicação OAuth no Google Cloud Console e preencha as credenciais indicadas no `.env.example`. Use este callback no ambiente local:
+
+- Google: `http://localhost:4000/auth/google/callback`
 
 ## Licença
 

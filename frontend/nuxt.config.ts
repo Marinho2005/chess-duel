@@ -4,6 +4,12 @@ export default defineNuxtConfig({
 
   modules: ['@pinia/nuxt'],
 
+  css: [
+    '@lichess-org/chessground/assets/chessground.base.css',
+    '@lichess-org/chessground/assets/chessground.brown.css',
+    '@lichess-org/chessground/assets/chessground.cburnett.css',
+  ],
+
   typescript: {
     strict: true,
     typeCheck: false,
@@ -22,6 +28,9 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'ChessDuel',
+      link: [
+        { rel: 'icon', type: 'image/png', href: '/favicon.png' },
+      ],
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
