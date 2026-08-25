@@ -31,29 +31,63 @@ Projeto pessoal em fase inicial de aprendizado. Nada de lógica de jogo ainda �
 - **Fase 3 — Matchmaking**: fila de espera e pareamento automático
 - **Fase 4 — Observabilidade e infra**: Traefik, Oban, Sentry, métricas (Prometheus/Grafana) — quando fizer sentido
 
-## Pré-requisitos
+## Como rodar com Docker Compose (recomendado)
 
-- **Elixir / Erlang** — via [asdf](https://asdf-vm.com/). Este projeto usa Elixir `1.18.x` com Erlang/OTP `27` (defina via `.tool-versions` na raiz do backend).
-- **Node.js** >= 20 (para o Nuxt 3)
-- **Docker** + Docker Compose v2 (para Postgres e Valkey)
-- **gh CLI** (opcional, para operações no GitHub)
-
-## Como rodar
-
-### 1. Subir a infra (Postgres + Valkey)
+O único pré-requisito é ter Docker com Compose v2. Na primeira execução:
 
 ```bash
-cp .env.example .env   # ajuste as credenciais se quiser
-docker compose up -d
-docker compose ps      # confira que os dois serviços estão healthy
+cp .env.example .env
+# Preencha GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET se for usar OAuth.
+docker compose up --build
 ```
 
-### 2. Rodar o backend (Phoenix)
+O Compose constrói e inicia PostgreSQL, Valkey, Phoenix e Nuxt. As migrations são
+aplicadas automaticamente antes de o backend iniciar. Depois, acesse:
+
+- **Frontend:** <http://localhost:3000>
+- **Backend/health check:** <http://localhost:4000/api/health>
+
+O código de `backend/` e `frontend/` é montado nos containers. Alterações no Nuxt
+são refletidas pelo Vite; alterações no Phoenix são recompiladas na próxima
+requisição. Dependências (`node_modules`, `deps` e `_build`) ficam isoladas em
+volumes Docker.
+
+Comandos úteis:
+
+```bash
+docker compose ps
+docker compose logs -f backend frontend
+docker compose exec backend mix ecto.migrate
+docker compose exec -e MIX_ENV=test backend mix test
+docker compose down
+```
+
+## Como rodar localmente (alternativa)
+
+Neste modo, é necessário ter Elixir `1.18.x`/OTP 27, Node.js 20 ou superior e
+Docker Compose instalados. Como o backend roda no host, ajuste no `.env`:
+
+```env
+DB_HOST=localhost
+VALKEY_URL=redis://localhost:6379
+NUXT_PUBLIC_API_URL=http://localhost:4000
+```
+
+Suba somente a infraestrutura:
+
+```bash
+cp .env.example .env
+# Faça os ajustes acima e preencha as credenciais desejadas.
+docker compose up -d postgres valkey
+```
+
+### Backend (Phoenix)
 
 ```bash
 cd backend
 set -a && source ../.env && set +a
 mix deps.get
+cd priv/chess_validator && npm install && cd ../..
 mix ecto.create
 mix ecto.migrate
 mix phx.server
@@ -66,18 +100,13 @@ curl http://localhost:4000/api/health
 # => {"status":"ok"}
 ```
 
-### 3. Rodar o frontend (Nuxt) — em outro terminal
+### Frontend (Nuxt) — em outro terminal
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-Acesse:
-
-- **Frontend:** <http://localhost:3000> — a página inicial chama o `/api/health` do backend e mostra o status da comunicação
-- **Backend health check:** <http://localhost:4000/api/health>
 
 ### Portas
 
@@ -92,7 +121,7 @@ Acesse:
 
 ```
 chess_duel/
-├── docker-compose.yml        # Postgres + Valkey (infra local)
+├── docker-compose.yml        # Ambiente completo de desenvolvimento
 ├── .env.example              # modelo de variáveis de ambiente
 ├── backend/                  # Phoenix (API only)
 │   └── lib/chess_duel_backend/
@@ -108,7 +137,7 @@ chess_duel/
 
 ## Variáveis de ambiente
 
-Existe um `.env.example` na raiz com as variáveis usadas pelo Docker Compose, backend e frontend (`DATABASE_URL`/`DB_*`, `VALKEY_URL`, `NUXT_PUBLIC_API_URL`, etc.).
+Existe um `.env.example` na raiz com as variáveis usadas pelo Docker Compose, backend e frontend (`DATABASE_URL`/`DB_*`, `VALKEY_URL`, `NUXT_PUBLIC_API_URL`, etc.). Os valores padrão usam os nomes internos `postgres` e `valkey`, próprios do Compose. Para executar o backend diretamente no host, altere esses hosts para `localhost`.
 
 Copie para `.env` e edite conforme sua máquina. ⚠️ **Nunca commite o `.env` real** — ele está no `.gitignore`. Apenas o `.env.example` (sem segredos) vai para o repositório.
 
