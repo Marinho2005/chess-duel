@@ -39,6 +39,50 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: chess_duel_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MIX_ENV: dev
+      DATABASE_URL: ""
+      DB_HOST: postgres
+      DB_PORT: 5432
+      VALKEY_URL: redis://valkey:6379
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend:/app
+      - /app/deps
+      - /app/_build
+      - /app/priv/chess_validator/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: chess_duel_frontend
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.nuxt
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   valkey_data:

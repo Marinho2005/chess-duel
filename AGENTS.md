@@ -32,6 +32,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), a partir da `develop`, nunca commitada direto na `develop` ou `main`
 - A interface oficial das partidas fica em `frontend/pages/game/[gameId].vue`; a antiga página manual `test-game.vue` foi removida após a validação da UI real.
 - O projeto tem duas pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento de outra branch; sempre `git pull` na `develop` antes de criar uma branch nova
+- O ambiente completo de desenvolvimento pode ser iniciado com `docker compose up --build`; a execução local de backend e frontend continua disponível como alternativa.
 
 ---
 
@@ -96,7 +97,7 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 ### Fora do roadmap numerado, mas necessária em algum momento
 
 - [x] **UI real de jogo** — Rota `/game/:gameId` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
-- [ ] **Dockerização completa** — Hoje o `docker-compose.yml` só sobe Postgres e Valkey; backend e frontend rodam localmente via `mix phx.server`/`npm run dev`. Dockerizar tudo faz sentido perto do momento de deploy, ou para padronizar o ambiente entre os dois desenvolvedores do projeto.
+- [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 
 ---
 
