@@ -5,6 +5,7 @@ defmodule ChessDuelBackendWeb.UserSocket do
 
   channel "games:*", ChessDuelBackendWeb.GamesChannel
   channel "game:*", ChessDuelBackendWeb.GameChannel
+  channel "matchmaking:*", ChessDuelBackendWeb.MatchmakingChannel
 
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do

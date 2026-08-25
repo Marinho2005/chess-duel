@@ -25,6 +25,7 @@ defmodule ChessDuelBackend.Games.TimeControl do
   }
 
   def default, do: Map.fetch!(@controls, @default_id)
+  def all, do: Map.values(@controls)
 
   def fetch(id) when is_binary(id) do
     case Map.fetch(@controls, id) do
