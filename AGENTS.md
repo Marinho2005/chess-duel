@@ -29,10 +29,55 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - Backend foi gerado com `--no-html --no-assets` (modo API puro) — não adicionar views HTML tradicionais
 - Contextos seguem a convenção Phoenix: pasta com nome do domínio (ex: `games/`), schemas dentro dela (ex: `games/game.ex`)
 - NÃO mexer no contexto `Blog`/`ArticleController` de exemplo, gerado durante o aprendizado inicial do framework — não faz parte do produto
-- Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), a partir da `develop`, nunca commitada direto na `develop` ou `main`
+- Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), criada a partir da `develop` atualizada; nunca trabalhar ou fazer push diretamente na `develop` ou `main`
 - A interface oficial das partidas fica em `frontend/pages/game/[gameId].vue`; a antiga página manual `test-game.vue` foi removida após a validação da UI real.
-- O projeto tem duas pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento de outra branch; sempre `git pull` na `develop` antes de criar uma branch nova
+- O projeto tem três pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento nas outras branches e manter cada funcionalidade isolada em sua própria branch
 - O ambiente completo de desenvolvimento pode ser iniciado com `docker compose up --build`; a execução local de backend e frontend continua disponível como alternativa.
+
+---
+
+## Fluxo Git da equipe
+
+O repositório segue este fluxo de branches:
+
+- `main`: versão estável do projeto
+- `develop`: integração das funcionalidades prontas
+- `feature/*`: desenvolvimento isolado de cada funcionalidade
+
+Antes de começar uma funcionalidade nova, atualizar a `develop` local e criar a branch a partir dela:
+
+```bash
+git switch develop
+git pull origin develop
+git switch -c feature/nome-da-feature
+```
+
+Durante o desenvolvimento, commits e pushes devem ser feitos somente na branch da feature:
+
+```bash
+git add .
+git commit -m "feat: descreve a funcionalidade"
+git push -u origin feature/nome-da-feature
+```
+
+Quando a funcionalidade estiver pronta, abrir um Pull Request de `feature/*` para `develop`. Pelo menos uma das outras pessoas deve revisar o PR antes do merge.
+
+Regras obrigatórias:
+
+- Não trabalhar, fazer commits ou dar push diretamente na `main` ou na `develop`
+- Não criar a branch da feature pelo site do GitHub; criá-la localmente a partir da `develop` atualizada e depois fazer o primeiro push
+- Usar uma branch `feature/*` separada para cada funcionalidade
+- Não trocar para a `develop` sem necessidade durante uma feature em andamento; usá-la para atualização e como base de uma nova branch
+- Integrar uma feature à `develop` somente por Pull Request revisado
+- Integrar `develop` à `main` somente quando houver uma versão estável
+- Antes de executar qualquer alteração, o agente deve conferir a branch atual e o estado do repositório, preservando o trabalho não commitado das outras pessoas
+
+Fluxo resumido:
+
+```text
+develop atualizada -> feature/* -> commits -> push -> Pull Request revisado -> develop
+develop estável -> Pull Request -> main
+```
 
 ---
 
