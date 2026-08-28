@@ -2,13 +2,14 @@
 import { Socket, type Channel } from 'phoenix'
 import type { Color, Key } from '@lichess-org/chessground/types'
 
-definePageMeta({ middleware: 'auth' })
+definePageMeta({ middleware: 'game-session' })
 
 type Player = {
   id: string
   nickname: string
-  rating: number
+  rating: number | null
   avatar_url: string | null
+  guest?: boolean
 }
 
 type Move = {
@@ -38,6 +39,7 @@ type GameState = {
   black_time_remaining_ms: number
   initial_time_ms: number
   increment_ms: number
+  guest_game: boolean
 }
 
 type MoveMade = Move & {
@@ -71,6 +73,7 @@ const errorMessage = ref('')
 const gameOverMessage = ref('')
 const ratingMessage = ref('')
 const pendingMove = ref(false)
+const guestGame = ref(false)
 
 const whiteTime = ref(180_000)
 const blackTime = ref(180_000)
@@ -110,7 +113,7 @@ const timeControlDescription = computed(() => {
 
 onMounted(async () => {
   auth.restoreSession()
-  if (!auth.token || !(await auth.fetchCurrentUser())) return
+  if (!auth.token || (!auth.isGuest && !(await auth.fetchCurrentUser()))) return
 
   const backendUrl = config.public.api.baseURL
   const websocketUrl = `${backendUrl.replace(/^http/, 'ws').replace(/\/$/, '')}/socket`
@@ -149,6 +152,7 @@ function applyInitialState(state: GameState) {
   isCheck.value = state.is_check
   initialTimeMs.value = state.initial_time_ms
   incrementMs.value = state.increment_ms
+  guestGame.value = state.guest_game
   syncClocks(state.white_time_remaining_ms, state.black_time_remaining_ms)
   connectionStatus.value = 'Conectado em tempo real'
 
@@ -196,7 +200,7 @@ function applyGameOver(result: GameOver) {
   pendingMove.value = false
   stopClock()
 
-  if (result.winner_player_id === auth.user?.id) {
+  if (result.winner_player_id === auth.identityId) {
     gameOverMessage.value = `Você venceu · ${gameOverReason(result.reason)}`
   } else if (result.winner_player_id) {
     gameOverMessage.value = `Você perdeu · ${gameOverReason(result.reason)}`
@@ -206,9 +210,11 @@ function applyGameOver(result: GameOver) {
 }
 
 async function applyRatingUpdate(rating: RatingUpdate) {
+  if (auth.isGuest) return
+
   updatePlayerRating(rating.white)
   updatePlayerRating(rating.black)
-  const own = rating.white.id === auth.user?.id ? rating.white : rating.black
+  const own = rating.white.id === auth.identityId ? rating.white : rating.black
   const variation = own.after - own.before
   ratingMessage.value = `${own.before} → ${own.after} (${variation >= 0 ? '+' : ''}${variation})`
   await auth.fetchCurrentUser()
@@ -265,6 +271,19 @@ function playerName(playerId: string) {
   return 'Jogador'
 }
 
+function playerSubtitle(player: Player | null) {
+  return player?.guest ? 'Convidado · sem rating' : `Rating ${player?.rating ?? '—'}`
+}
+
+async function leaveGame() {
+  if (auth.isGuest) {
+    await auth.logOut()
+    await navigateTo('/')
+  } else {
+    await navigateTo('/lobby')
+  }
+}
+
 function moveError(reason?: string) {
   const messages: Record<string, string> = {
     illegal_move: 'Lance ilegal. O tabuleiro foi restaurado.',
@@ -298,9 +317,10 @@ function gameOverReason(reason: GameOver['reason']) {
 <template>
   <main class="game-shell">
     <header class="game-header">
-      <NuxtLink to="/lobby" class="brand"><span>♟</span> ChessDuel</NuxtLink>
+      <span v-if="auth.isGuest" class="brand"><span>♟</span> ChessDuel</span>
+      <NuxtLink v-else to="/lobby" class="brand"><span>♟</span> ChessDuel</NuxtLink>
       <div class="connection"><i />{{ connectionStatus }}</div>
-      <NuxtLink to="/lobby" class="leave">← Voltar ao salão</NuxtLink>
+      <button type="button" class="leave" @click="leaveGame">← {{ auth.isGuest ? 'Sair da sessão' : 'Voltar ao salão' }}</button>
     </header>
 
     <div class="game-layout">
@@ -308,7 +328,7 @@ function gameOverReason(reason: GameOver['reason']) {
         <article class="player-bar" :class="{ thinking: currentTurn === topColor && gameStatus !== 'finished' }">
           <img v-if="avatarUrl(topPlayer)" :src="avatarUrl(topPlayer) || ''" :alt="`Foto de ${topPlayer?.nickname}`">
           <span v-else class="avatar">{{ topPlayer?.nickname.charAt(0).toUpperCase() || '?' }}</span>
-          <div><strong>{{ topPlayer?.nickname || 'Aguardando oponente' }}</strong><small>Rating {{ topPlayer?.rating || '—' }}</small></div>
+          <div><strong>{{ topPlayer?.nickname || 'Aguardando oponente' }} <em v-if="topPlayer?.guest">Convidado</em></strong><small>{{ playerSubtitle(topPlayer) }}</small></div>
           <time>{{ formatClock(topTime) }}</time>
         </article>
 
@@ -327,14 +347,14 @@ function gameOverReason(reason: GameOver['reason']) {
         <article class="player-bar" :class="{ thinking: currentTurn === bottomColor && gameStatus !== 'finished' }">
           <img v-if="avatarUrl(bottomPlayer)" :src="avatarUrl(bottomPlayer) || ''" :alt="`Foto de ${bottomPlayer?.nickname}`">
           <span v-else class="avatar">{{ bottomPlayer?.nickname.charAt(0).toUpperCase() || '?' }}</span>
-          <div><strong>{{ bottomPlayer?.nickname || 'Você' }}</strong><small>Rating {{ bottomPlayer?.rating || '—' }}</small></div>
+          <div><strong>{{ bottomPlayer?.nickname || 'Você' }} <em v-if="bottomPlayer?.guest">Convidado</em></strong><small>{{ playerSubtitle(bottomPlayer) }}</small></div>
           <time>{{ formatClock(bottomTime) }}</time>
         </article>
       </section>
 
       <aside class="match-panel">
         <div class="panel-heading">
-          <span>PARTIDA RANQUEADA</span>
+          <span>{{ guestGame ? 'PARTIDA CASUAL · CONVIDADOS' : 'PARTIDA RANQUEADA' }}</span>
           <h1>Duelo em andamento</h1>
           <p>{{ timeControlLabel }} · {{ timeControlDescription }}</p>
         </div>
@@ -343,6 +363,7 @@ function gameOverReason(reason: GameOver['reason']) {
           <span>RESULTADO</span>
           <strong>{{ gameOverMessage }}</strong>
           <p v-if="ratingMessage">Novo rating: {{ ratingMessage }}</p>
+          <p v-if="guestGame">Crie uma conta para salvar seu histórico e disputar rating nas próximas partidas.</p>
         </div>
 
         <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
@@ -372,8 +393,9 @@ function gameOverReason(reason: GameOver['reason']) {
 
 <style scoped>
 .game-shell { --cream: #f4eddf; --panel: #fffaf0; --line: #ddcdb5; --ink: #38281e; --brown: #925b35; min-height: 100vh; padding: 1.2rem clamp(1rem, 3vw, 2.5rem) 2rem; color: var(--ink); background-color: var(--cream); background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }
-.game-header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; max-width: 1260px; margin: 0 auto 1.2rem; }.brand { color: var(--brown); font: 700 1.65rem Georgia, serif; text-decoration: none; }.brand span { font-size: 1.2rem; }.leave { justify-self: end; color: #765944; text-decoration: none; }.leave:hover { text-decoration: underline; }.connection { display: flex; align-items: center; gap: 0.45rem; color: #6d7f5e; font-size: 0.82rem; }.connection i { width: 7px; height: 7px; background: #6c8d5c; border-radius: 50%; box-shadow: 0 0 7px #6c8d5c; }
+.game-header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; max-width: 1260px; margin: 0 auto 1.2rem; }.brand { color: var(--brown); font: 700 1.65rem Georgia, serif; text-decoration: none; }.brand span { font-size: 1.2rem; }.leave { justify-self: end; padding: 0; color: #765944; background: transparent; border: 0; font: inherit; cursor: pointer; }.leave:hover { text-decoration: underline; }.connection { display: flex; align-items: center; gap: 0.45rem; color: #6d7f5e; font-size: 0.82rem; }.connection i { width: 7px; height: 7px; background: #6c8d5c; border-radius: 50%; box-shadow: 0 0 7px #6c8d5c; }
 .game-layout { display: grid; grid-template-columns: minmax(420px, 780px) minmax(290px, 360px); justify-content: center; align-items: start; gap: clamp(1.2rem, 3vw, 2.5rem); max-width: 1260px; margin: auto; }.board-column { display: grid; gap: 0.7rem; min-width: 0; }.board-frame { width: min(100%, calc(100vh - 205px)); justify-self: center; }.player-bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.8rem; min-height: 66px; padding: 0.65rem 0.85rem; background: #fffaf0c9; border: 1px solid transparent; border-radius: 13px; transition: border-color 160ms, box-shadow 160ms; }.player-bar.thinking { border-color: #b98a62; box-shadow: 0 5px 18px #6d47231b; }.player-bar img, .avatar { display: grid; width: 44px; height: 44px; place-items: center; object-fit: cover; color: white; background: var(--brown); border-radius: 50%; font-weight: 800; }.player-bar div { display: grid; }.player-bar small { color: #887261; }.player-bar time { min-width: 112px; padding: 0.45rem 0.7rem; text-align: center; background: #eadcc7; border-radius: 9px; font: 700 clamp(1.45rem, 3vw, 2.1rem)/1 ui-monospace, monospace; }
+.player-bar em { display: inline-block; margin-left: .35rem; padding: .15rem .4rem; color: #765039; background: #ead7bc; border-radius: 999px; font-size: .62rem; font-style: normal; text-transform: uppercase; letter-spacing: .06em; }
 .match-panel { display: flex; min-height: min(760px, calc(100vh - 85px)); flex-direction: column; overflow: hidden; background: #fffaf0e8; border: 1px solid #e4d5bf; border-radius: 18px; box-shadow: 0 18px 40px #60401f18; }.panel-heading { padding: 1.5rem; border-bottom: 1px solid var(--line); }.panel-heading > span, .result-card > span { color: var(--brown); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.11em; }.panel-heading h1 { margin: 0.35rem 0; font: 500 1.65rem Georgia, serif; }.panel-heading p { margin: 0; color: #867160; font-size: 0.86rem; }.result-card { display: grid; gap: 0.45rem; margin: 1rem; padding: 1rem; color: #f8f3e8; background: #765039; border-radius: 12px; }.result-card strong { font: 500 1.15rem Georgia, serif; }.result-card p { margin: 0; color: #e9d9c7; }.error { margin: 1rem; padding: 0.8rem; color: #9c3f2f; background: #f6ded5; border-radius: 10px; }
 .moves-panel { display: flex; min-height: 0; flex: 1; flex-direction: column; padding: 1.2rem 1.5rem; }.moves-title { display: flex; align-items: center; justify-content: space-between; }.moves-title h2 { margin: 0; font: 500 1.25rem Georgia, serif; }.moves-title span { display: grid; min-width: 27px; height: 27px; place-items: center; color: #79543b; background: #eadcc7; border-radius: 50%; font-size: 0.75rem; }.moves-panel ol { display: grid; align-content: start; gap: 0.25rem; max-height: 410px; margin: 1rem 0 0; padding: 0; overflow-y: auto; list-style: none; }.moves-panel li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 0.6rem; padding: 0.55rem 0.45rem; border-bottom: 1px solid #eadfce; }.moves-panel li > span, .moves-panel small, .empty { color: #8c7867; font-size: 0.78rem; }.moves-panel strong { font-family: ui-monospace, monospace; }.empty { margin: auto; text-align: center; }.match-panel footer { display: grid; gap: 0.2rem; padding: 1rem 1.5rem; color: #6f855c; background: #eee2d0; border-top: 1px solid var(--line); }.match-panel footer small { color: #8a7766; }
 @media (max-width: 900px) { .game-header { grid-template-columns: 1fr auto; }.connection { display: none; }.game-layout { grid-template-columns: minmax(0, 680px); }.board-frame { width: 100%; }.match-panel { min-height: 0; }.moves-panel ol { max-height: 260px; } }

@@ -11,6 +11,7 @@ defmodule ChessDuelBackend.Application do
         {Phoenix.PubSub, name: ChessDuelBackend.PubSub},
         ChessDuelBackend.ChessValidator,
         ChessDuelBackend.Games.Lobby,
+        ChessDuelBackend.Games.GuestMatchmaker,
         {Registry, keys: :unique, name: ChessDuelBackend.GameRegistry},
         {DynamicSupervisor, name: ChessDuelBackend.GameSupervisor, strategy: :one_for_one},
         redix_child_spec(),
