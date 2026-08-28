@@ -43,7 +43,9 @@ defmodule ChessDuelBackend.MixProject do
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.7"},
       {:ueberauth, "~> 0.10"},
-      {:ueberauth_google, "~> 0.10"}
+      {:ueberauth_google, "~> 0.10"},
+      {:ueberauth_discord, "~> 0.7"},
+      {:ueberauth_github, "~> 0.8"}
     ]
   end
 

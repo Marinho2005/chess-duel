@@ -2,6 +2,8 @@ defmodule ChessDuelBackend.AccountsTest do
   use ChessDuelBackend.DataCase, async: true
 
   alias ChessDuelBackend.Accounts
+  alias ChessDuelBackend.Accounts.OAuthIdentity
+  alias ChessDuelBackend.Repo
 
   test "register_user/1 cria usuario com nickname unico, senha segura e rating inicial" do
     attrs = %{email: "player@example.com", nickname: "player_one", password: "password1234"}
@@ -40,16 +42,16 @@ defmodule ChessDuelBackend.AccountsTest do
     assert updated_user.email == "profile@example.com"
   end
 
-  test "authenticate_oauth_user/2 cria uma unica conta Google com rating padrao" do
+  test "Google novo cria conta e logins futuros usam o ID estavel" do
     attrs = %{
       uid: "google-123",
       email: "oauth@example.com",
       name: "OAuth Player",
-      avatar_url: "https://images.example.com/avatar.png"
+      avatar_url: "https://images.example.com/avatar.png",
+      email_verified: true
     }
 
     assert {:ok, user} = Accounts.authenticate_oauth_user(:google, attrs)
-    assert user.google_id == "google-123"
     assert user.email == "oauth@example.com"
     assert user.nickname == "OAuth_Player"
     assert user.avatar_path == "https://images.example.com/avatar.png"
@@ -58,12 +60,13 @@ defmodule ChessDuelBackend.AccountsTest do
     refute user.hashed_password
 
     assert {:ok, same_user} =
-             Accounts.authenticate_oauth_user(:google, %{attrs | email: nil})
+             Accounts.authenticate_oauth_user(:google, %{attrs | email: nil, email_verified: false})
 
     assert same_user.id == user.id
+    assert identity_for(user, "google").provider_uid == "google-123"
   end
 
-  test "authenticate_oauth_user/2 vincula Google a conta local pelo email" do
+  test "Google com email verificado vincula a conta local pelo email" do
     assert {:ok, local_user} =
              Accounts.register_user(%{
                email: "linked@example.com",
@@ -74,16 +77,17 @@ defmodule ChessDuelBackend.AccountsTest do
     assert {:ok, google_user} =
              Accounts.authenticate_oauth_user(:google, %{
                uid: "google-linked",
-               email: "LINKED@example.com"
+               email: "LINKED@example.com",
+               email_verified: true
              })
 
     assert google_user.id == local_user.id
-    assert google_user.google_id == "google-linked"
     assert google_user.hashed_password == local_user.hashed_password
     assert google_user.confirmed_at
+    assert identity_for(local_user, "google").provider_uid == "google-linked"
   end
 
-  test "authenticate_oauth_user/2 gera sufixo para nickname repetido e exige email" do
+  test "Google gera sufixo para nickname repetido e exige email verificado" do
     assert {:ok, _user} =
              Accounts.register_user(%{
                email: "first@example.com",
@@ -95,13 +99,95 @@ defmodule ChessDuelBackend.AccountsTest do
              Accounts.authenticate_oauth_user(:google, %{
                uid: "google-new",
                email: "second@example.com",
-               nickname: "same_name"
+               nickname: "same_name",
+               email_verified: true
              })
 
     assert oauth_user.nickname == "same_name_1"
 
     assert {:error, :oauth_email_required} =
-             Accounts.authenticate_oauth_user(:google, %{uid: "google-private", email: nil})
+             Accounts.authenticate_oauth_user(:google, %{
+               uid: "google-private",
+               email: nil,
+               email_verified: true
+             })
+
+    assert {:error, :oauth_email_not_verified} =
+             Accounts.authenticate_oauth_user(:google, %{
+               uid: "google-unverified",
+               email: "unverified@example.com",
+               email_verified: false
+             })
+  end
+
+  for provider <- [:discord, :github] do
+    test "#{provider} novo cria conta e existente autentica pelo ID" do
+      provider = unquote(provider)
+
+      attrs = %{
+        uid: "#{provider}-123",
+        email: "#{provider}@example.com",
+        nickname: "#{provider}_player"
+      }
+
+      assert {:ok, user} = Accounts.authenticate_oauth_user(provider, attrs)
+      assert user.email =~ "@oauth.chessduel.invalid"
+      assert identity_for(user, Atom.to_string(provider)).provider_email == attrs.email
+
+      assert {:ok, same_user} =
+               Accounts.authenticate_oauth_user(provider, %{attrs | email: "changed@example.com"})
+
+      assert same_user.id == user.id
+    end
+
+    test "#{provider} nao vincula automaticamente por email" do
+      provider = unquote(provider)
+
+      assert {:ok, local_user} =
+               Accounts.register_user(%{
+                 email: "shared-#{provider}@example.com",
+                 nickname: "local_#{provider}",
+                 password: "password1234"
+               })
+
+      assert {:ok, oauth_user} =
+               Accounts.authenticate_oauth_user(provider, %{
+                 uid: "#{provider}-separate",
+                 email: local_user.email,
+                 nickname: "remote_#{provider}"
+               })
+
+      refute oauth_user.id == local_user.id
+      assert identity_for(oauth_user, Atom.to_string(provider)).provider_email == local_user.email
+    end
+  end
+
+  test "a mesma combinacao de provider e provider_uid e rejeitada pelo banco" do
+    assert {:ok, first_user} =
+             Accounts.authenticate_oauth_user(:discord, %{uid: "duplicate", email: nil})
+
+    assert {:ok, second_user} =
+             Accounts.register_user(%{
+               email: "second-identity@example.com",
+               nickname: "second_identity",
+               password: "password1234"
+             })
+
+    assert {:error, changeset} =
+             %OAuthIdentity{}
+             |> OAuthIdentity.changeset(%{
+               user_id: second_user.id,
+               provider: "discord",
+               provider_uid: "duplicate"
+             })
+             |> Repo.insert()
+
+    assert "has already been taken" in errors_on(changeset).provider
+    assert identity_for(first_user, "discord")
+  end
+
+  defp identity_for(user, provider) do
+    Repo.get_by!(OAuthIdentity, user_id: user.id, provider: provider)
   end
 
   defp errors_on(changeset) do

@@ -40,10 +40,12 @@ config :chess_duel_backend, :cors,
 
 config :ueberauth, Ueberauth,
   providers: [
-    google: {Ueberauth.Strategy.Google, [default_scope: "email profile"]}
+    google: {Ueberauth.Strategy.Google, [default_scope: "email profile"]},
+    discord: {Ueberauth.Strategy.Discord, [default_scope: "identify email"]},
+    github: {Ueberauth.Strategy.Github, [default_scope: "read:user user:email"]}
   ]
 
-# As credenciais sao criadas manualmente no Google Cloud Console.
+# As credenciais sao criadas manualmente nos paineis de cada provedor.
 # As tuplas fazem a leitura somente em runtime.
 config :ueberauth, Ueberauth.Strategy.Google.OAuth,
   client_id: {System, :get_env, ["GOOGLE_CLIENT_ID"]},
