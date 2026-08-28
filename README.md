@@ -37,7 +37,7 @@ O único pré-requisito é ter Docker com Compose v2. Na primeira execução:
 
 ```bash
 cp .env.example .env
-# Preencha GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET se for usar OAuth.
+# Preencha as credenciais dos provedores sociais que quiser usar.
 docker compose up --build
 ```
 
@@ -141,9 +141,19 @@ Existe um `.env.example` na raiz com as variáveis usadas pelo Docker Compose, b
 
 Copie para `.env` e edite conforme sua máquina. ⚠️ **Nunca commite o `.env` real** — ele está no `.gitignore`. Apenas o `.env.example` (sem segredos) vai para o repositório.
 
-Para testar o login social, crie uma aplicação OAuth no Google Cloud Console e preencha as credenciais indicadas no `.env.example`. Use este callback no ambiente local:
+Para testar o login social, crie aplicações OAuth nos painéis dos provedores e
+preencha as credenciais indicadas no `.env.example`. Os secrets ficam somente no
+backend. Use estes callbacks no ambiente local:
 
 - Google: `http://localhost:4000/auth/google/callback`
+- Discord: `http://localhost:4000/auth/discord/callback`
+- GitHub: `http://localhost:4000/auth/github/callback`
+
+Variáveis necessárias por provedor:
+
+- Google: `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`
+- Discord: `DISCORD_CLIENT_ID` e `DISCORD_CLIENT_SECRET`
+- GitHub: `GITHUB_CLIENT_ID` e `GITHUB_CLIENT_SECRET`
 
 ## Licença
 

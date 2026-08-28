@@ -9,12 +9,12 @@ defmodule ChessDuelBackend.Accounts.User do
     field :nickname, :string
     field :country, :string
     field :avatar_path, :string
-    field :google_id, :string
     field :rating, :integer, default: 1200
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :confirmed_at, :naive_datetime
     field :authenticated_at, :naive_datetime, virtual: true
+    has_many :oauth_identities, ChessDuelBackend.Accounts.OAuthIdentity
 
     timestamps()
   end
@@ -44,27 +44,11 @@ defmodule ChessDuelBackend.Accounts.User do
   @doc "Changeset para criar uma conta autenticada por um provedor OAuth."
   def oauth_registration_changeset(user, attrs) do
     user
-    |> cast(attrs, [:email, :nickname, :avatar_path, :google_id, :confirmed_at])
+    |> cast(attrs, [:email, :nickname, :avatar_path, :confirmed_at])
     |> validate_email([])
     |> validate_nickname([])
     |> validate_required([:confirmed_at])
     |> validate_length(:avatar_path, max: 2_048)
-    |> oauth_constraints()
-  end
-
-  @doc "Changeset para vincular uma identidade OAuth a uma conta existente."
-  def oauth_link_changeset(user, :google, uid) do
-    field = :google_id
-
-    user
-    |> change(%{field => uid, confirmed_at: NaiveDateTime.utc_now(:second)})
-    |> validate_required([field, :confirmed_at])
-    |> oauth_constraints()
-  end
-
-  defp oauth_constraints(changeset) do
-    changeset
-    |> unique_constraint(:google_id)
   end
 
   @doc false

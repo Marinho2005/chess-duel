@@ -6,7 +6,7 @@ defmodule ChessDuelBackend.Accounts do
   import Ecto.Query, warn: false
   alias ChessDuelBackend.Repo
 
-  alias ChessDuelBackend.Accounts.{User, UserToken, UserNotifier}
+  alias ChessDuelBackend.Accounts.{OAuthIdentity, User, UserToken, UserNotifier}
 
   ## Database getters
 
@@ -106,66 +106,124 @@ defmodule ChessDuelBackend.Accounts do
     end
   end
 
+  @oauth_providers [:google, :discord, :github]
+
   @doc "Localiza, vincula ou cria um usuario a partir de uma identidade OAuth confiavel."
   def authenticate_oauth_user(provider, attrs)
-      when provider == :google and is_map(attrs) do
-    uid = attrs |> Map.fetch!(:uid) |> to_string()
+      when provider in @oauth_providers and is_map(attrs) do
+    uid = attrs |> Map.get(:uid, "") |> to_string() |> String.trim()
     email = normalize_oauth_email(attrs[:email])
 
     cond do
       uid == "" ->
         {:error, :invalid_oauth_identity}
 
-      user = get_user_by_oauth_id(provider, uid) ->
+      user = get_user_by_oauth_identity(provider, uid) ->
         {:ok, user}
 
-      email == "" ->
-        {:error, :oauth_email_required}
+      provider == :google ->
+        authenticate_new_google(uid, email, attrs)
 
-      user = get_user_by_email(email) ->
-        link_oauth_identity(user, provider, uid)
-
-      true ->
+      provider in [:discord, :github] ->
         create_oauth_user(provider, uid, email, attrs)
     end
   end
 
-  defp get_user_by_oauth_id(:google, uid), do: Repo.get_by(User, google_id: uid)
-
-  defp link_oauth_identity(user, provider, uid) do
-    field = oauth_field(provider)
-
-    case Map.get(user, field) do
-      nil -> user |> User.oauth_link_changeset(provider, uid) |> Repo.update()
-      ^uid -> {:ok, user}
-      _other_uid -> {:error, :oauth_identity_conflict}
+  defp authenticate_new_google(uid, email, attrs) do
+    cond do
+      attrs[:email_verified] != true -> {:error, :oauth_email_not_verified}
+      email == "" -> {:error, :oauth_email_required}
+      user = get_user_by_email(email) -> link_oauth_identity(user, :google, uid, email)
+      true -> create_oauth_user(:google, uid, email, attrs)
     end
   end
 
   defp create_oauth_user(provider, uid, email, attrs) do
+    user_email = if provider == :google, do: email, else: oauth_internal_email(provider, uid)
+
     oauth_attrs =
       %{
-        email: email,
-        nickname: unique_oauth_nickname(attrs[:nickname] || attrs[:name] || email),
+        email: user_email,
+        nickname:
+          unique_oauth_nickname(
+            attrs[:nickname] || attrs[:name] || blank_to_nil(email) || Atom.to_string(provider)
+          ),
         avatar_path: normalize_oauth_avatar(attrs[:avatar_url]),
         confirmed_at: NaiveDateTime.utc_now(:second)
       }
-      |> Map.put(oauth_field(provider), uid)
 
-    case %User{} |> User.oauth_registration_changeset(oauth_attrs) |> Repo.insert() do
-      {:ok, user} ->
-        {:ok, user}
+    result =
+      Repo.transact(fn ->
+        case get_user_by_oauth_identity(provider, uid) do
+          %User{} = user ->
+            {:ok, user}
+
+          nil ->
+            with {:ok, user} <-
+                   %User{} |> User.oauth_registration_changeset(oauth_attrs) |> Repo.insert(),
+                 {:ok, _identity} <- insert_oauth_identity(user, provider, uid, email) do
+              {:ok, user}
+            end
+        end
+      end)
+
+    case result do
+      {:error, _reason} = error ->
+        # Duas callbacks simultaneas podem disputar a mesma constraint. Depois
+        # do rollback, reutilizamos a identidade que venceu a corrida.
+        case get_user_by_oauth_identity(provider, uid) do
+          %User{} = user -> {:ok, user}
+          nil -> error
+        end
+
+      success ->
+        success
+    end
+  end
+
+  defp link_oauth_identity(user, provider, uid, email) do
+    case insert_oauth_identity(user, provider, uid, email) do
+      {:ok, _identity} ->
+        if user.confirmed_at do
+          {:ok, user}
+        else
+          user
+          |> Ecto.Changeset.change(confirmed_at: NaiveDateTime.utc_now(:second))
+          |> Repo.update()
+        end
 
       {:error, _changeset} = error ->
-        # Se duas callbacks da mesma conta chegarem juntas, a constraint do
-        # banco decide e reutilizamos a conta que venceu a corrida.
-        result = get_user_by_oauth_id(provider, uid) || get_user_by_email(email) || error
-
-        case result do
-          %User{} = user -> link_oauth_identity(user, provider, uid)
-          _ -> error
+        case get_user_by_oauth_identity(provider, uid) do
+          %User{id: user_id} = existing when user_id == user.id -> {:ok, existing}
+          %User{} -> {:error, :oauth_identity_conflict}
+          nil -> error
         end
     end
+  end
+
+  defp insert_oauth_identity(user, provider, uid, email) do
+    %OAuthIdentity{}
+    |> OAuthIdentity.changeset(%{
+      user_id: user.id,
+      provider: Atom.to_string(provider),
+      provider_uid: uid,
+      provider_email: blank_to_nil(email)
+    })
+    |> Repo.insert()
+  end
+
+  defp get_user_by_oauth_identity(provider, uid) do
+    from(identity in OAuthIdentity,
+      join: user in assoc(identity, :user),
+      where: identity.provider == ^Atom.to_string(provider) and identity.provider_uid == ^uid,
+      select: user
+    )
+    |> Repo.one()
+  end
+
+  defp oauth_internal_email(provider, uid) do
+    digest = :crypto.hash(:sha256, uid) |> Base.url_encode64(padding: false)
+    "#{provider}-#{digest}@oauth.chessduel.invalid"
   end
 
   defp unique_oauth_nickname(source) do
@@ -204,8 +262,8 @@ defmodule ChessDuelBackend.Accounts do
 
   defp normalize_oauth_email(value) when is_binary(value), do: String.trim(value)
   defp normalize_oauth_email(_value), do: ""
-
-  defp oauth_field(:google), do: :google_id
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
 
   ## Settings
 
