@@ -50,7 +50,7 @@ async function submit() {
   }
 }
 
-function socialLogin(provider: 'google') {
+function socialLogin(provider: 'google' | 'discord' | 'github') {
   window.location.assign(`${config.public.api.baseURL.replace(/\/$/, '')}/auth/${provider}`)
 }
 </script>
@@ -100,6 +100,18 @@ function socialLogin(provider: 'google') {
           </svg>
           <span>Continuar com Google</span>
         </button>
+        <button class="social discord" type="button" @click="socialLogin('discord')">
+          <svg class="social-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M19.54 5.34A16.3 16.3 0 0 0 15.44 4l-.5 1.03a15.2 15.2 0 0 0-5.86 0L8.56 4c-1.43.25-2.8.7-4.1 1.35C1.87 9.2 1.17 12.96 1.52 16.67a16.6 16.6 0 0 0 5.03 2.54l1.22-1.66a10.6 10.6 0 0 1-1.92-.92l.47-.36a11.7 11.7 0 0 0 11.36 0l.48.36c-.62.36-1.26.66-1.93.92l1.22 1.66a16.5 16.5 0 0 0 5.03-2.54c.42-4.3-.72-8.03-2.94-11.33ZM8.7 14.4c-1.1 0-2-1.02-2-2.28 0-1.25.88-2.28 2-2.28 1.12 0 2.02 1.03 2 2.28 0 1.26-.88 2.28-2 2.28Zm6.6 0c-1.1 0-2-1.02-2-2.28 0-1.25.88-2.28 2-2.28 1.12 0 2.02 1.03 2 2.28 0 1.26-.88 2.28-2 2.28Z"/>
+          </svg>
+          <span>Continuar com Discord</span>
+        </button>
+        <button class="social github" type="button" @click="socialLogin('github')">
+          <svg class="social-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.6 9.6 0 0 1 12 6.82a9.6 9.6 0 0 1 2.5.34c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85V21c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/>
+          </svg>
+          <span>Continuar com GitHub</span>
+        </button>
       </template>
       <p v-if="auth.error || oauthError" class="error">{{ auth.error || oauthError }}</p>
     </form>
@@ -141,7 +153,9 @@ button { cursor: pointer; }
 .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #dfd2c1; }
 .social { display: inline-flex; align-items: center; justify-content: center; gap: 0.7rem; font-weight: 700; background: #fff; }
 .social.google { color: #65452f; }
-.google-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
+.social.discord { color: #5865f2; }
+.social.github { color: #24292f; }
+.google-icon, .social-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
 .social:hover { transform: translateY(-1px); box-shadow: 0 5px 12px #60401f1c; }
 .hint { margin: -0.4rem 0 0; color: #8b7664; font-size: 0.82rem; }
 .error { margin: 0; color: #b33e2e; text-align: center; }
