@@ -10,6 +10,12 @@ export type AuthUser = {
   inserted_at: string
 }
 
+export type GuestIdentity = {
+  id: string
+  nickname: string
+  guest: true
+}
+
 type AuthResponse = {
   token: string
   user: AuthUser
@@ -20,13 +26,22 @@ type RegistrationResponse = {
   message: string
 }
 
+type GuestResponse = {
+  token: string
+  guest: GuestIdentity
+  expires_in: number
+}
+
 const tokenStorageKey = 'chess-duel:auth-token'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(null)
   const user = ref<AuthUser | null>(null)
+  const guest = ref<GuestIdentity | null>(null)
   const error = ref('')
   const config = useRuntimeConfig()
+  const isGuest = computed(() => guest.value !== null)
+  const identityId = computed(() => guest.value?.id || user.value?.id || null)
 
   function restoreSession() {
     if (import.meta.client && !token.value) {
@@ -37,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
   function saveSession(response: AuthResponse) {
     token.value = response.token
     user.value = response.user
+    guest.value = null
     error.value = ''
 
     if (import.meta.client) {
@@ -63,6 +79,30 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logIn(email: string, password: string) {
     return authenticate('/api/users/log_in', { email, password })
+  }
+
+  async function startGuestSession() {
+    error.value = ''
+
+    try {
+      const response = await $fetch<GuestResponse>('/api/guests/session', {
+        baseURL: config.public.api.baseURL,
+        method: 'POST'
+      })
+
+      token.value = response.token
+      guest.value = response.guest
+      user.value = null
+
+      if (import.meta.client) {
+        sessionStorage.removeItem(tokenStorageKey)
+      }
+
+      return true
+    } catch (requestError) {
+      error.value = formatRequestError(requestError)
+      return false
+    }
   }
 
   async function completeOAuth(tokenValue: string) {
@@ -97,6 +137,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchCurrentUser() {
+    if (guest.value && token.value) return true
+
     restoreSession()
 
     if (!token.value) {
@@ -118,6 +160,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logOut() {
+    if (guest.value) {
+      clearSession()
+      return
+    }
+
     if (token.value) {
       try {
         await $fetch('/api/users/log_out', {
@@ -193,6 +240,7 @@ export const useAuthStore = defineStore('auth', () => {
   function clearSession() {
     token.value = null
     user.value = null
+    guest.value = null
 
     if (import.meta.client) {
       sessionStorage.removeItem(tokenStorageKey)
@@ -221,5 +269,5 @@ export const useAuthStore = defineStore('auth', () => {
     return 'Nao foi possivel concluir a solicitacao.'
   }
 
-  return { token, user, error, restoreSession, register, logIn, completeOAuth, fetchCurrentUser, updateProfile, updateAvatar, logOut }
+  return { token, user, guest, isGuest, identityId, error, restoreSession, register, logIn, startGuestSession, completeOAuth, fetchCurrentUser, updateProfile, updateAvatar, logOut }
 })

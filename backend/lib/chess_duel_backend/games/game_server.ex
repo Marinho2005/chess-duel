@@ -21,9 +21,14 @@ defmodule ChessDuelBackend.Games.GameServer do
     GenServer.start_link(__MODULE__, {game_id, time_control}, name: via_tuple(game_id))
   end
 
+  def start_link({game_id, time_control, game_type}) do
+    GenServer.start_link(__MODULE__, {game_id, time_control, game_type}, name: via_tuple(game_id))
+  end
+
   def child_spec(game_id) do
     {id, start_arg} =
       case game_id do
+        {id, _time_control, _game_type} = args -> {id, args}
         {id, _time_control} = args -> {id, args}
         id -> {id, id}
       end
@@ -35,13 +40,17 @@ defmodule ChessDuelBackend.Games.GameServer do
     }
   end
 
-  def start_or_get(game_id, time_control \\ nil) when is_binary(game_id) do
+  def start_or_get(game_id, time_control \\ nil, game_type \\ :registered)
+      when is_binary(game_id) do
     case Registry.lookup(GameRegistry, game_id) do
       [{pid, _value}] ->
         {:ok, pid}
 
       [] ->
-        child_arg = if time_control, do: {game_id, time_control}, else: game_id
+        child_arg =
+          if time_control || game_type != :registered,
+            do: {game_id, time_control, game_type},
+            else: game_id
 
         case DynamicSupervisor.start_child(GameSupervisor, {__MODULE__, child_arg}) do
           {:ok, pid} -> {:ok, pid}
@@ -61,9 +70,18 @@ defmodule ChessDuelBackend.Games.GameServer do
     end
   end
 
-  def player_connected(game_id, player_id) do
+  def player_connected(game_id, player_id, identity_type \\ :user)
+
+  def player_connected(game_id, player_id, :guest) do
+    case Registry.lookup(GameRegistry, game_id) do
+      [{pid, _value}] -> GenServer.call(pid, {:player_connected, player_id, :guest})
+      [] -> {:error, :game_not_found}
+    end
+  end
+
+  def player_connected(game_id, player_id, :user) do
     with {:ok, pid} <- start_or_get(game_id) do
-      GenServer.call(pid, {:player_connected, player_id})
+      GenServer.call(pid, {:player_connected, player_id, :user})
     end
   end
 
@@ -74,6 +92,12 @@ defmodule ChessDuelBackend.Games.GameServer do
   def reserve_players(game_id, white_player_id, black_player_id, time_control) do
     with {:ok, pid} <- start_or_get(game_id, time_control) do
       GenServer.call(pid, {:reserve_players, white_player_id, black_player_id})
+    end
+  end
+
+  def reserve_guest_players(game_id, white_guest, black_guest, time_control) do
+    with {:ok, pid} <- start_or_get(game_id, time_control, :guest) do
+      GenServer.call(pid, {:reserve_guest_players, white_guest, black_guest})
     end
   end
 
@@ -90,9 +114,11 @@ defmodule ChessDuelBackend.Games.GameServer do
   end
 
   @impl true
-  def init(game_id) when is_binary(game_id), do: init({game_id, nil})
+  def init(game_id) when is_binary(game_id), do: init({game_id, nil, :registered})
 
-  def init({game_id, time_control}) do
+  def init({game_id, time_control}), do: init({game_id, time_control, :registered})
+
+  def init({game_id, time_control, game_type}) do
     configured_initial_time_ms =
       Application.get_env(
         :chess_duel_backend,
@@ -114,8 +140,11 @@ defmodule ChessDuelBackend.Games.GameServer do
 
     initial_state = %{
       game_id: game_id,
+      game_type: game_type,
       white_player_id: nil,
       black_player_id: nil,
+      white_player: nil,
+      black_player: nil,
       connected_player_counts: %{},
       abandonment_timer_refs: %{},
       abandonment_grace_ms: abandonment_grace_ms,
@@ -138,9 +167,17 @@ defmodule ChessDuelBackend.Games.GameServer do
       persistence_pid: nil
     }
 
+    if game_type == :guest do
+      {:ok, initial_state}
+    else
+      init_persisted_game(initial_state)
+    end
+  end
+
+  defp init_persisted_game(initial_state) do
     initial_attrs = persistence_attrs(initial_state)
 
-    case Games.get_or_create_game(game_id, initial_attrs) do
+    case Games.get_or_create_game(initial_state.game_id, initial_attrs) do
       {:ok, game} ->
         game_server_pid = self()
 
@@ -168,7 +205,7 @@ defmodule ChessDuelBackend.Games.GameServer do
   def handle_call(
         {:reserve_players, white_player_id, black_player_id},
         _from,
-        %{white_player_id: nil, black_player_id: nil, moves: []} = state
+        %{game_type: :registered, white_player_id: nil, black_player_id: nil, moves: []} = state
       ) do
     state = %{state | white_player_id: white_player_id, black_player_id: black_player_id}
     persist_state(state)
@@ -178,13 +215,45 @@ defmodule ChessDuelBackend.Games.GameServer do
   def handle_call(
         {:reserve_players, white_player_id, black_player_id},
         _from,
-        %{white_player_id: white_player_id, black_player_id: black_player_id} = state
+        %{
+          game_type: :registered,
+          white_player_id: white_player_id,
+          black_player_id: black_player_id
+        } = state
       ) do
     {:reply, {:ok, snapshot_clock(state)}, state}
   end
 
-  def handle_call({:reserve_players, _white_player_id, _black_player_id}, _from, state) do
+  def handle_call(
+        {:reserve_players, _white_player_id, _black_player_id},
+        _from,
+        %{game_type: :registered} = state
+      ) do
     {:reply, {:error, :game_full}, state}
+  end
+
+  def handle_call({:reserve_players, _white_player_id, _black_player_id}, _from, state) do
+    {:reply, {:error, :identity_mismatch}, state}
+  end
+
+  def handle_call(
+        {:reserve_guest_players, white_guest, black_guest},
+        _from,
+        %{game_type: :guest, white_player_id: nil, black_player_id: nil, moves: []} = state
+      ) do
+    state = %{
+      state
+      | white_player_id: white_guest.id,
+        black_player_id: black_guest.id,
+        white_player: public_guest(white_guest),
+        black_player: public_guest(black_guest)
+    }
+
+    {:reply, {:ok, snapshot_clock(state)}, state}
+  end
+
+  def handle_call({:reserve_guest_players, _white, _black}, _from, state) do
+    {:reply, {:error, :identity_mismatch}, state}
   end
 
   def handle_call(
@@ -208,11 +277,25 @@ defmodule ChessDuelBackend.Games.GameServer do
     end
   end
 
-  def handle_call({:player_connected, player_id}, _from, %{status: "finished"} = state) do
+  def handle_call(
+        {:player_connected, _player_id, identity_type},
+        _from,
+        state
+      )
+      when (identity_type == :guest and state.game_type != :guest) or
+             (identity_type == :user and state.game_type != :registered) do
+    {:reply, {:error, :identity_mismatch}, state}
+  end
+
+  def handle_call(
+        {:player_connected, player_id, _identity_type},
+        _from,
+        %{status: "finished"} = state
+      ) do
     {:reply, {:ok, %{color: player_color(state, player_id), state: snapshot_clock(state)}}, state}
   end
 
-  def handle_call({:player_connected, player_id}, _from, state) do
+  def handle_call({:player_connected, player_id, _identity_type}, _from, state) do
     case player_color(state, player_id) || next_open_color(state) do
       nil ->
         {:reply, {:error, :game_full}, state}
@@ -462,6 +545,10 @@ defmodule ChessDuelBackend.Games.GameServer do
   end
 
   defp assign_player_if_needed(state, _color, _player_id), do: state
+
+  defp public_guest(guest) do
+    %{id: guest.id, nickname: guest.nickname, rating: nil, avatar_url: nil, guest: true}
+  end
 
   defp increment_connection(state, player_id) do
     update_in(state.connected_player_counts, fn counts ->

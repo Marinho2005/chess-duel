@@ -25,6 +25,7 @@ defmodule ChessDuelBackendWeb.Router do
     pipe_through :api
 
     get "/health", HealthController, :index
+    post "/guests/session", GuestSessionController, :create
     post "/users/register", UserRegistrationController, :create
     post "/users/confirm/:token", UserConfirmationController, :create
     post "/users/log_in", UserSessionController, :create

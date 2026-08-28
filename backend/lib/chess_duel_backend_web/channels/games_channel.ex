@@ -5,9 +5,13 @@ defmodule ChessDuelBackendWeb.GamesChannel do
 
   @impl true
   def join("games:lobby", _payload, socket) do
-    state = Lobby.connect(socket.assigns.current_user)
-    ChessDuelBackendWeb.Endpoint.broadcast("games:lobby", "lobby_updated", state)
-    {:ok, state, assign(socket, :joined_lobby, true)}
+    if socket.assigns[:identity_type] == :user do
+      state = Lobby.connect(socket.assigns.current_user)
+      ChessDuelBackendWeb.Endpoint.broadcast("games:lobby", "lobby_updated", state)
+      {:ok, state, assign(socket, :joined_lobby, true)}
+    else
+      {:error, %{reason: "registered_users_only"}}
+    end
   end
 
   @impl true

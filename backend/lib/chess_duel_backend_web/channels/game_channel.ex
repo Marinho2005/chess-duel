@@ -8,7 +8,9 @@ defmodule ChessDuelBackendWeb.GameChannel do
   def join("game:" <> game_id, _payload, socket) do
     player_id = socket.assigns.user_id
 
-    with {:ok, %{color: color, state: state}} <- GameServer.player_connected(game_id, player_id) do
+    with {:ok, %{color: color, state: state}} <-
+           GameServer.player_connected(game_id, player_id, socket.assigns.identity_type),
+         true <- color in ["white", "black"] do
       socket =
         socket
         |> assign(:game_id, game_id)
@@ -17,6 +19,9 @@ defmodule ChessDuelBackendWeb.GameChannel do
       {:ok, public_state(state, color), socket}
     else
       {:error, :game_full} -> {:error, %{reason: "game_full"}}
+      {:error, :identity_mismatch} -> {:error, %{reason: "identity_mismatch"}}
+      {:error, :game_not_found} -> {:error, %{reason: "game_not_found"}}
+      false -> {:error, %{reason: "not_a_player"}}
       {:error, reason} -> {:error, %{reason: inspect(reason)}}
     end
   end
@@ -89,8 +94,9 @@ defmodule ChessDuelBackendWeb.GameChannel do
       player_color: player_color,
       white_player_id: state.white_player_id,
       black_player_id: state.black_player_id,
-      white_player: public_player(state.white_player_id),
-      black_player: public_player(state.black_player_id),
+      white_player: public_player(state, :white),
+      black_player: public_player(state, :black),
+      guest_game: state.game_type == :guest,
       is_check: state.is_check,
       is_checkmate: state.is_checkmate,
       is_stalemate: state.is_stalemate,
@@ -102,9 +108,15 @@ defmodule ChessDuelBackendWeb.GameChannel do
     }
   end
 
-  defp public_player(nil), do: nil
+  defp public_player(%{game_type: :guest} = state, :white), do: state.white_player
+  defp public_player(%{game_type: :guest} = state, :black), do: state.black_player
 
-  defp public_player(user_id) do
+  defp public_player(state, :white), do: registered_player(state.white_player_id)
+  defp public_player(state, :black), do: registered_player(state.black_player_id)
+
+  defp registered_player(nil), do: nil
+
+  defp registered_player(user_id) do
     with {:ok, user_id} <- Ecto.UUID.cast(user_id),
          user when not is_nil(user) <- Accounts.get_user(user_id) do
       %{id: user.id, nickname: user.nickname, rating: user.rating, avatar_url: user.avatar_path}

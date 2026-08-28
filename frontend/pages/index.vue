@@ -6,6 +6,7 @@ const nickname = ref('')
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
+const startingGuest = ref(false)
 const confirmationPending = ref(false)
 const sessionExpired = computed(() => route.query.session === 'expired')
 const config = useRuntimeConfig()
@@ -21,6 +22,11 @@ const oauthError = computed(() => {
 
 onMounted(async () => {
   auth.restoreSession()
+
+  if (auth.isGuest) {
+    await navigateTo('/guest')
+    return
+  }
 
   if (auth.token && (await auth.fetchCurrentUser())) {
     await navigateTo('/lobby')
@@ -48,6 +54,14 @@ async function submit() {
   if (authenticated) {
     await navigateTo('/lobby')
   }
+}
+
+async function playAsGuest() {
+  startingGuest.value = true
+  const started = await auth.startGuestSession()
+  startingGuest.value = false
+
+  if (started) await navigateTo('/guest')
 }
 
 function socialLogin(provider: 'google') {
@@ -100,6 +114,9 @@ function socialLogin(provider: 'google') {
           </svg>
           <span>Continuar com Google</span>
         </button>
+        <button class="guest-link" type="button" :disabled="startingGuest" @click="playAsGuest">
+          {{ startingGuest ? 'Preparando sessão...' : 'Jogar como convidado' }}
+        </button>
       </template>
       <p v-if="auth.error || oauthError" class="error">{{ auth.error || oauthError }}</p>
     </form>
@@ -143,6 +160,8 @@ button { cursor: pointer; }
 .social.google { color: #65452f; }
 .google-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
 .social:hover { transform: translateY(-1px); box-shadow: 0 5px 12px #60401f1c; }
+.guest-link { padding: 0.35rem; color: #806d5d; background: transparent; border: 0; text-decoration: underline; text-underline-offset: 3px; }
+.guest-link:hover { color: var(--brown); }
 .hint { margin: -0.4rem 0 0; color: #8b7664; font-size: 0.82rem; }
 .error { margin: 0; color: #b33e2e; text-align: center; }
 .session-message { margin: 0; padding: 0.8rem; color: #74472e; text-align: center; background: #efe2ce; border-radius: 10px; }

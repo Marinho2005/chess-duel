@@ -4,10 +4,13 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   require Phoenix.ChannelTest
 
   alias ChessDuelBackend.Accounts
+  alias ChessDuelBackend.Accounts.Guest
   alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackend.Repo
   alias ChessDuelBackend.Games.GameServer
   alias ChessDuelBackendWeb.GameChannel
+  alias ChessDuelBackendWeb.GamesChannel
+  alias ChessDuelBackendWeb.GuestMatchmakingChannel
   alias ChessDuelBackendWeb.MatchmakingChannel
   alias ChessDuelBackendWeb.UserSocket
 
@@ -30,6 +33,46 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   test "recusa token ausente ou invalido" do
     assert :error = Phoenix.ChannelTest.connect(UserSocket, %{})
     assert :error = Phoenix.ChannelTest.connect(UserSocket, %{"token" => "invalid"})
+  end
+
+  test "aceita token temporario e identifica o socket como convidado" do
+    %{token: token, guest: guest} = Guest.new()
+
+    assert {:ok, socket} = Phoenix.ChannelTest.connect(UserSocket, %{"token" => token})
+    assert socket.assigns.identity_type == :guest
+    assert socket.assigns.user_id == guest.id
+    assert UserSocket.id(socket) == "guests_socket:#{guest.id}"
+  end
+
+  test "convidado nao entra no lobby nem no matchmaking por rating" do
+    %{token: token, guest: guest} = Guest.new()
+    {:ok, socket} = Phoenix.ChannelTest.connect(UserSocket, %{"token" => token})
+
+    assert {:error, %{reason: "registered_users_only"}} =
+             Phoenix.ChannelTest.subscribe_and_join(socket, GamesChannel, "games:lobby")
+
+    assert {:error, %{reason: "registered_users_only"}} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               socket,
+               MatchmakingChannel,
+               "matchmaking:#{guest.id}"
+             )
+  end
+
+  test "usuario autenticado nao entra na fila exclusiva de convidados" do
+    user = register_user("guest-queue-block@example.com", "guest_queue_block")
+
+    {:ok, socket} =
+      Phoenix.ChannelTest.connect(UserSocket, %{
+        "token" => Accounts.generate_user_api_token(user)
+      })
+
+    assert {:error, %{reason: "guests_only"}} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               socket,
+               GuestMatchmakingChannel,
+               "guest_matchmaking:#{user.id}"
+             )
   end
 
   test "MatchmakingChannel aceita somente o topico do usuario autenticado" do
