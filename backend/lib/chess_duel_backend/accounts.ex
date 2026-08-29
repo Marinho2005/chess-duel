@@ -65,6 +65,29 @@ defmodule ChessDuelBackend.Accounts do
     Repo.get_by(User, nickname: nickname)
   end
 
+  @ranking_page_size 50
+
+  def list_ranked_users(page \\ 1) when is_integer(page) and page > 0 do
+    base_query = from(user in User, where: not is_nil(user.confirmed_at))
+
+    users =
+      base_query
+      |> order_by([user], desc: user.rating, asc: user.nickname, asc: user.id)
+      |> limit(^@ranking_page_size)
+      |> offset(^((page - 1) * @ranking_page_size))
+      |> Repo.all()
+
+    total = Repo.aggregate(base_query, :count)
+
+    %{
+      users: users,
+      page: page,
+      page_size: @ranking_page_size,
+      total: total,
+      total_pages: max(ceil(total / @ranking_page_size), 1)
+    }
+  end
+
   ## User registration
 
   @doc """

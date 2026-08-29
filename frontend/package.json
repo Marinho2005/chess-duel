@@ -24,6 +24,7 @@
     "@lichess-org/chessground": "^10.1.1",
     "@pinia/nuxt": "^0.5.5",
     "chess.js": "^1.4.0",
+    "lucide-vue-next": "^1.0.0",
     "phoenix": "^1.8.11",
     "pinia": "^2.2.0"
   }
