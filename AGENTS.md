@@ -154,3 +154,6 @@ develop estável -> Pull Request -> main
 3. Quando houver ambiguidade de implementação sem uma resposta óbvia, escolher a abordagem mais simples e idiomática em Phoenix/Elixir, e comentar brevemente a decisão no código
 4. Não modificar lógica já validada e funcionando (marcada com `[x]` no roadmap acima) a menos que a tarefa seja explicitamente sobre corrigir ou alterar essa parte
 5. **Ao concluir uma tarefa, atualizar a marcação da etapa correspondente neste arquivo** (`[ ]` → `[~]` → `[x]`), como parte do commit da feature — isso mantém o roadmap sempre refletindo o estado real do projeto para qualquer sessão futura, sua ou de outro desenvolvedor
+
+
+**O agente de código NUNCA deve executar comandos git add, git commit, git push, git merge ou qualquer outro comando Git. Toda a gestão de Git é feita manualmente pelo desenvolvedor, no terminal, fora do controle do agente. O agente pode sugerir mensagens de commit ou indicar que uma tarefa está pronta para commit, mas nunca deve executar o comando.
