@@ -30,6 +30,7 @@ defmodule ChessDuelBackendWeb.Router do
     post "/users/confirm/:token", UserConfirmationController, :create
     post "/users/log_in", UserSessionController, :create
     get "/profiles/:nickname", UserController, :show
+    get "/ranking", UserController, :ranking
   end
 
   scope "/api", ChessDuelBackendWeb do

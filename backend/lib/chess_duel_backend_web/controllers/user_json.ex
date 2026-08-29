@@ -22,6 +22,15 @@ defmodule ChessDuelBackendWeb.UserJSON do
     }
   end
 
+  def ranking_data(user) do
+    %{
+      id: user.id,
+      nickname: user.nickname,
+      avatar_url: user.avatar_path,
+      rating: user.rating
+    }
+  end
+
   def errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {message, opts} ->
       Enum.reduce(opts, message, fn {key, value}, text ->

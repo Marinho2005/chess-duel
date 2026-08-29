@@ -144,6 +144,7 @@ develop estável -> Pull Request -> main
 - [x] **UI real de jogo** — Rota `/game/:gameId` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 - [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
+- [x] **Navegação para funcionalidades futuras** — Os itens "Puzzles" e "Bots" existem como placeholders visuais na navegação. Puzzles aguarda as etapas correspondentes da Fase 4; bots ainda não possui etapa formalmente numerada no roadmap.
 
 ---
 
