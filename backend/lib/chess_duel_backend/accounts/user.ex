@@ -8,6 +8,7 @@ defmodule ChessDuelBackend.Accounts.User do
     field :email, :string
     field :nickname, :string
     field :country, :string
+    field :country_code, :string
     field :avatar_path, :string
     field :rating, :integer, default: 1200
     field :password, :string, virtual: true, redact: true
@@ -32,14 +33,23 @@ defmodule ChessDuelBackend.Accounts.User do
   @doc "Changeset dos dados publicos editaveis do perfil."
   def profile_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:nickname, :country])
+    |> cast(attrs, [:nickname, :country, :country_code])
     |> validate_nickname(opts)
     |> validate_length(:country, max: 56)
+    |> update_change(:country_code, &normalize_country_code/1)
+    |> validate_format(:country_code, ~r/^[A-Z]{2}$/,
+      message: "must be a two-letter ISO country code"
+    )
   end
 
   def avatar_changeset(user, avatar_path) do
     change(user, avatar_path: avatar_path)
   end
+
+  defp normalize_country_code(value) when is_binary(value),
+    do: value |> String.trim() |> String.upcase()
+
+  defp normalize_country_code(value), do: value
 
   @doc "Changeset para criar uma conta autenticada por um provedor OAuth."
   def oauth_registration_changeset(user, attrs) do

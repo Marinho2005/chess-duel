@@ -80,7 +80,8 @@ defmodule ChessDuelBackend.ChessValidator do
            is_checkmate: result["is_checkmate"],
            is_stalemate: result["is_stalemate"],
            is_draw: result["is_draw"],
-           captured: result["captured"]
+           captured: result["captured"],
+           san: result["san"]
          }}
 
       {:ok, %{"valid" => false, "reason" => "illegal_move"}} ->

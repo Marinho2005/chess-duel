@@ -3,6 +3,26 @@ defmodule ChessDuelBackend.GameAnalysis.Stockfish do
 
   @timeout 30_000
 
+  def best_move(fen, opts) when is_binary(fen) do
+    config = Application.get_env(:chess_duel_backend, :stockfish, [])
+    executable = Keyword.get(opts, :path) || Keyword.get(config, :path) || find_executable()
+
+    with {:ok, engine} <- open(executable),
+         :ok <- initialize(engine, config, opts) do
+      Port.command(engine, "position fen #{fen}\n")
+      Port.command(engine, "go movetime #{Keyword.get(opts, :movetime_ms, 150)}\n")
+
+      result = await_bestmove(engine, nil)
+      Port.command(engine, "quit\n")
+
+      case result do
+        {:ok, %{best_move: "(none)"}} -> {:error, :no_legal_move}
+        {:ok, %{best_move: move}} -> {:ok, move}
+        error -> error
+      end
+    end
+  end
+
   def analyze(moves, opts \\ []) do
     config = Application.get_env(:chess_duel_backend, :stockfish, [])
     executable = Keyword.get(opts, :path) || Keyword.get(config, :path) || find_executable()
@@ -38,12 +58,25 @@ defmodule ChessDuelBackend.GameAnalysis.Stockfish do
     error -> {:error, Exception.message(error)}
   end
 
-  defp initialize(engine, config) do
+  defp initialize(engine, config, opts \\ []) do
     Port.command(engine, "uci\n")
 
     with :ok <- await_token(engine, "uciok") do
       Port.command(engine, "setoption name Threads value #{Keyword.get(config, :threads, 1)}\n")
       Port.command(engine, "setoption name Hash value #{Keyword.get(config, :hash_mb, 32)}\n")
+
+      Port.command(
+        engine,
+        "setoption name Skill Level value #{Keyword.get(opts, :skill_level, 20)}\n"
+      )
+
+      if Keyword.get(opts, :limit_strength, false) do
+        Port.command(engine, "setoption name UCI_LimitStrength value true\n")
+        Port.command(engine, "setoption name UCI_Elo value #{Keyword.fetch!(opts, :elo)}\n")
+      else
+        Port.command(engine, "setoption name UCI_LimitStrength value false\n")
+      end
+
       Port.command(engine, "isready\n")
       await_token(engine, "readyok")
     end

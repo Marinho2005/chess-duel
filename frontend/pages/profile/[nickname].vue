@@ -5,6 +5,7 @@ type PublicProfile = {
   id: string
   nickname: string
   country: string | null
+  country_code: string | null
   avatar_url: string | null
   rating: number
   inserted_at: string
@@ -70,7 +71,8 @@ function memberSince(date: string) {
         <div>
           <span class="eyebrow">PERFIL DO JOGADOR</span>
           <h1>{{ profile.nickname }}</h1>
-          <p>{{ profile.country || 'País não informado' }}</p>
+          <p v-if="profile.country_code"><ProfileCountryFlag :code="profile.country_code" show-name /></p>
+          <p v-else>País não informado</p>
         </div>
       </div>
 
@@ -87,12 +89,12 @@ function memberSince(date: string) {
 
 <style scoped>
 .profile-shell { min-height: 100vh; padding: clamp(1.2rem, 5vw, 4rem); color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }
-.back { display: inline-block; margin-bottom: 2rem; color: #815638; text-decoration: none; }.back:hover { text-decoration: underline; }
-.card { width: min(720px, 100%); margin: 5vh auto 0; padding: clamp(1.5rem, 5vw, 3rem); background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 22px; box-shadow: 0 20px 45px #60401f1c; }
-.identity { display: flex; align-items: center; gap: 1.5rem; }.avatar { display: grid; flex: 0 0 auto; width: 92px; height: 92px; place-items: center; color: white; object-fit: cover; background: #925b35; border-radius: 50%; font: 700 2.2rem Georgia, serif; }
-.eyebrow { color: #925b35; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }.identity h1 { margin: 0.3rem 0; font: 500 clamp(2rem, 6vw, 3.4rem) Georgia, serif; }.identity p, .member { margin: 0; color: #857060; }
-.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 2.5rem 0; }.stats article { display: grid; gap: 0.35rem; padding: 1.4rem; background: #efe3cf; border: 1px solid #dfcfb8; border-radius: 14px; }.stats strong { color: #925b35; font: 500 1.8rem Georgia, serif; }.stats span { color: #806d5d; }
-.status { text-align: center; }.piece { color: #925b35; font-size: 3rem; }.status h1 { font-family: Georgia, serif; }
-.history-link { display: inline-block; margin-top: 1.5rem; padding: .85rem 1.1rem; color: white; font-weight: 700; text-decoration: none; background: #925b35; border-radius: 10px; }
+.back { display: inline-block; margin-bottom: 2rem; color: #7f5130; text-decoration: none; }.back:hover { text-decoration: underline; }
+.card { width: min(720px, 100%); margin: 5vh auto 0; padding: clamp(1.5rem, 5vw, 3rem); background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 22px; box-shadow: 0 20px 45px #6f45281c; }
+.identity { display: flex; align-items: center; gap: 1.5rem; }.avatar { display: grid; flex: 0 0 auto; width: 92px; height: 92px; place-items: center; color: white; object-fit: cover; background: #6f4528; border-radius: 50%; font: 700 2.2rem Georgia, serif; }
+.eyebrow { color: #6f4528; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }.identity h1 { margin: 0.3rem 0; font: 500 clamp(2rem, 6vw, 3.4rem) Georgia, serif; }.identity p, .member { margin: 0; color: #857060; }
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 2.5rem 0; }.stats article { display: grid; gap: 0.35rem; padding: 1.4rem; background: #efe3cf; border: 1px solid #dfcfb8; border-radius: 14px; }.stats strong { color: #6f4528; font: 500 1.8rem Georgia, serif; }.stats span { color: #806d5d; }
+.status { text-align: center; }.piece { color: #6f4528; font-size: 3rem; }.status h1 { font-family: Georgia, serif; }
+.history-link { display: inline-block; margin-top: 1.5rem; padding: .85rem 1.1rem; color: white; font-weight: 700; text-decoration: none; background: #6f4528; border-radius: 10px; }
 @media (max-width: 560px) { .identity { align-items: flex-start; }.avatar { width: 64px; height: 64px; }.stats { grid-template-columns: 1fr; } }
 </style>

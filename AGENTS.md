@@ -129,6 +129,7 @@ develop estável -> Pull Request -> main
 - [x] **4.2 Análise pós-jogo assíncrona** — Stockfish analisa partidas finalizadas em background; participantes acompanham o processamento e revisam a partida em uma tela interativa com replay, classificações e barra de avaliação.
 - [ ] **4.3 Banco de puzzles táticos** — Curadoria/geração de puzzles a partir de partidas reais.
 - [ ] **4.4 Puzzle Rush** — Modo de puzzles cronometrados, estilo chess.com.
+- [x] **4.5 Partidas contra bots** — Stockfish com cinco níveis de força, integrado ao `GameServer`, com personagens ilustrados, preparação autoritativa, abortar, desistir e partidas sem alteração de rating.
 
 ### Fase 5 — Monetização (SaaS)
 
@@ -148,7 +149,9 @@ develop estável -> Pull Request -> main
 - [x] **UI real de jogo** — Rota `/game/:gameId/live` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 - [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
-- [x] **Navegação para funcionalidades futuras** — Os itens "Puzzles" e "Bots" existem como placeholders visuais na navegação. Puzzles aguarda as etapas correspondentes da Fase 4; bots ainda não possui etapa formalmente numerada no roadmap.
+- [x] **Navegação para funcionalidades futuras** — O item "Puzzles" permanece como placeholder visual aguardando as etapas 4.3 e 4.4; "Bots" agora leva à seleção funcional implementada na etapa 4.5.
+- [x] **Polimento de UX/UI da partida** — Sons discretos com preferência local, país ISO com bandeira reutilizável, ação pós-jogo para análise, planilha SAN por full move e microinterações acessíveis na navegação.
+- [x] **Revanche e preferência de layout** — Partidas encerradas permitem revanche com cores invertidas contra humanos ou bots; o tamanho conjunto do tabuleiro e das identidades dos jogadores é configurável e persistido, e o replay aceita navegação pelas setas do teclado.
 
 ---
 

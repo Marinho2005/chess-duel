@@ -39,7 +39,7 @@ const items = [
 
 <style scoped>
 .sidebar { position: sticky; top: 0; display: flex; height: 100vh; flex-direction: column; gap: 2rem; padding: 2rem 1.4rem; background: #fffaf0dd; border-right: 1px solid #dfcfb8; }
-.logo { color: #925b35; font-size: 1.5rem; text-decoration: none; white-space: nowrap; }
+.logo { color: #6f4528; font-size: 1.5rem; text-decoration: none; white-space: nowrap; }
 .logo strong { font: 700 1.7rem Georgia, serif; }
 nav { display: grid; gap: 0.5rem; }
 nav a { display: flex; align-items: center; gap: .75rem; padding: 0.85rem 1rem; color: #806d5d; text-decoration: none; border: 1px solid transparent; border-radius: 10px; }

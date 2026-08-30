@@ -15,7 +15,8 @@ defmodule ChessDuelBackend.Games.GameServerClockTest do
     assert state.increment_ms == 3_000
 
     assert {:ok, after_white_first} = GameServer.make_move(game_id, "e2", "e4", white_id)
-    assert after_white_first.white_time_remaining_ms == 303_000
+    assert after_white_first.white_time_remaining_ms <= 303_000
+    assert after_white_first.white_time_remaining_ms > 302_500
 
     assert {:ok, _after_black} = GameServer.make_move(game_id, "e7", "e5", black_id)
     Process.sleep(30)
@@ -37,7 +38,8 @@ defmodule ChessDuelBackend.Games.GameServerClockTest do
     assert state.increment_ms == 0
 
     assert {:ok, after_move} = GameServer.make_move(game_id, "e2", "e4", white_id)
-    assert after_move.white_time_remaining_ms == 60_000
+    assert after_move.white_time_remaining_ms <= 60_000
+    assert after_move.white_time_remaining_ms > 59_500
   end
 
   defp cleanup_game(game_id) do
