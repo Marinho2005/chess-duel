@@ -8,6 +8,7 @@ defmodule ChessDuelBackend.Application do
     children =
       [
         ChessDuelBackend.Repo,
+        {Oban, Application.fetch_env!(:chess_duel_backend, Oban)},
         {Phoenix.PubSub, name: ChessDuelBackend.PubSub},
         ChessDuelBackend.ChessValidator,
         ChessDuelBackend.Games.Lobby,

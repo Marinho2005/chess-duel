@@ -64,7 +64,7 @@ docker compose down
 
 ## Como rodar localmente (alternativa)
 
-Neste modo, é necessário ter Elixir `1.18.x`/OTP 27, Node.js 20 ou superior e
+Neste modo, é necessário ter Elixir `1.18.x`/OTP 27, Node.js 20 ou superior, Stockfish e
 Docker Compose instalados. Como o backend roda no host, ajuste no `.env`:
 
 ```env
@@ -92,6 +92,11 @@ mix ecto.create
 mix ecto.migrate
 mix phx.server
 ```
+
+O executável do Stockfish é detectado automaticamente no `PATH`. Se estiver em
+outro local, defina `STOCKFISH_PATH` (por exemplo, `/usr/games/stockfish`). No
+Docker Compose ele já é instalado na imagem do backend. As análises pós-partida
+são executadas de forma assíncrona pela fila `analysis` do Oban.
 
 O backend sobe em `http://localhost:4000`. Health check:
 

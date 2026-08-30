@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 
+definePageMeta({ layout: false })
+
 type TimeControlId = 'bullet_1_0' | 'blitz_3_0' | 'blitz_5_3' | 'rapid_10_0'
 type PrivateRoom = { code: string; time_control: { label: string } }
 
@@ -103,7 +105,7 @@ async function copyPrivateRoomLink() {
 
 async function enterGame(match: { game_id: string }) {
   status.value = 'Oponente encontrado! Entrando na partida...'
-  await navigateTo(`/game/${match.game_id}`)
+  await navigateTo(`/game/${match.game_id}/live`)
 }
 
 function showError(message: string) {

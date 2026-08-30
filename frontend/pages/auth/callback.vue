@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: false })
+
 const auth = useAuthStore()
 const message = ref('Finalizando sua autenticacao...')
 

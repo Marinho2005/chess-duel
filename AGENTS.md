@@ -30,7 +30,9 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - Contextos seguem a convenção Phoenix: pasta com nome do domínio (ex: `games/`), schemas dentro dela (ex: `games/game.ex`)
 - NÃO mexer no contexto `Blog`/`ArticleController` de exemplo, gerado durante o aprendizado inicial do framework — não faz parte do produto
 - Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), criada a partir da `develop` atualizada; nunca trabalhar ou fazer push diretamente na `develop` ou `main`
-- A interface oficial das partidas fica em `frontend/pages/game/[gameId].vue`; a antiga página manual `test-game.vue` foi removida após a validação da UI real.
+- A interface oficial das partidas ao vivo fica em `frontend/pages/game/[gameId]/live.vue`, na rota `/game/:gameId/live`; a análise pós-jogo fica em `frontend/pages/game/[gameId]/review.vue`, na rota `/game/:gameId/review`. As duas são rotas irmãs para impedir que o Nuxt monte a partida ao vivo como página pai da análise.
+- Na rota ao vivo, `:gameId` representa `Game.game_id`, identificador público usado pelo `GameServer` e pelo tópico Phoenix. Na rota de review, representa `Game.id`, chave primária UUID usada pelos endpoints de análise. Não intercambiar os dois valores.
+- As páginas principais usam `frontend/layouts/default.vue`, que renderiza o componente compartilhado `frontend/components/AppSidebar.vue`. Partidas ao vivo e reviews usam `layout: false` para permanecerem em tela cheia.
 - O projeto tem três pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento nas outras branches e manter cada funcionalidade isolada em sua própria branch
 - O ambiente completo de desenvolvimento pode ser iniciado com `docker compose up --build`; a execução local de backend e frontend continua disponível como alternativa.
 
@@ -121,8 +123,8 @@ develop estável -> Pull Request -> main
 
 ### Fase 4 — Puzzles e análise
 
-- [ ] **4.1 Worker Stockfish separado** — Processo isolado do game service, para não competir por recursos com partidas ao vivo.
-- [ ] **4.2 Análise pós-jogo assíncrona** — Fila de análise usando Stockfish depois que a partida termina.
+- [x] **4.1 Worker Stockfish separado** — Processo UCI isolado do game service, executado por uma fila Oban dedicada para não competir por recursos com partidas ao vivo.
+- [x] **4.2 Análise pós-jogo assíncrona** — Stockfish analisa partidas finalizadas em background; participantes acompanham o processamento e revisam a partida em uma tela interativa com replay, classificações e barra de avaliação.
 - [ ] **4.3 Banco de puzzles táticos** — Curadoria/geração de puzzles a partir de partidas reais.
 - [ ] **4.4 Puzzle Rush** — Modo de puzzles cronometrados, estilo chess.com.
 
@@ -141,7 +143,7 @@ develop estável -> Pull Request -> main
 
 ### Fora do roadmap numerado, mas necessária em algum momento
 
-- [x] **UI real de jogo** — Rota `/game/:gameId` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
+- [x] **UI real de jogo** — Rota `/game/:gameId/live` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 - [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
 

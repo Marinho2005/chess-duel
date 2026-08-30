@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 
-definePageMeta({ middleware: 'game-session' })
+definePageMeta({ middleware: 'game-session', layout: false })
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -50,7 +50,7 @@ async function enterGame(match: { game_id: string }) {
   if (navigating) return
   navigating = true
   status.value = 'Oponente encontrado! Iniciando a partida...'
-  await navigateTo(`/game/${match.game_id}`)
+  await navigateTo(`/game/${match.game_id}/live`)
 }
 
 function showError(reason: string) {

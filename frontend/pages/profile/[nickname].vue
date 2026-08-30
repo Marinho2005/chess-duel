@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: 'default' })
+
 type PublicProfile = {
   id: string
   nickname: string
