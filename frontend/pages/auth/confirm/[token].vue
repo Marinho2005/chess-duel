@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: false })
+
 const route = useRoute()
 const config = useRuntimeConfig()
 const status = ref<'confirming' | 'confirmed' | 'error'>('confirming')

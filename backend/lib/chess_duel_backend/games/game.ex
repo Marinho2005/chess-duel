@@ -28,6 +28,7 @@ defmodule ChessDuelBackend.Games.Game do
     field :black_rating_after, :integer
 
     has_many :rating_changes, ChessDuelBackend.Ratings.RatingChange
+    has_one :analysis, ChessDuelBackend.GameAnalysis.Analysis
 
     timestamps(type: :utc_datetime)
   end

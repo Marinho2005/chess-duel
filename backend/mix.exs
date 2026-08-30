@@ -38,6 +38,7 @@ defmodule ChessDuelBackend.MixProject do
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.12"},
       {:postgrex, ">= 0.19.0"},
+      {:oban, "~> 2.20"},
       {:redix, "~> 1.5"},
       {:cors_plug, "~> 3.0"},
       {:jason, "~> 1.4"},

@@ -3,10 +3,12 @@ FROM elixir:1.18.3-otp-27
 ENV MIX_ENV=dev
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential ca-certificates git inotify-tools nodejs npm \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates git inotify-tools nodejs npm stockfish \
     && rm -rf /var/lib/apt/lists/* \
     && mix local.hex --force \
     && mix local.rebar --force
+
+ENV STOCKFISH_PATH=/usr/games/stockfish
 
 WORKDIR /app
 

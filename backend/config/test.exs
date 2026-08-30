@@ -30,5 +30,10 @@ config :chess_duel_backend, ChessDuelBackendWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+config :chess_duel_backend, Oban,
+  testing: :manual,
+  queues: false,
+  plugins: false
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime

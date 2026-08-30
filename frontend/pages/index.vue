@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: false })
+
 const auth = useAuthStore()
 const route = useRoute()
 const mode = ref<'login' | 'register'>('login')

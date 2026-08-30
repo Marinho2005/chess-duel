@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 
-definePageMeta({ middleware: 'auth' })
+definePageMeta({ middleware: 'auth', layout: 'default' })
 
 type LobbyUser = { id: string; nickname: string; rating: number; avatar_url: string | null }
 type TimeControl = { id: string; label: string; initial_time_ms: number; increment_ms: number }
@@ -66,7 +66,7 @@ onMounted(async () => {
   channel.on('lobby_updated', applyLobbyState)
   channel.on('challenge_accepted', async (game: AcceptedGame) => {
     if (game.white_player.id === auth.user?.id || game.black_player.id === auth.user?.id) {
-      await navigateTo(`/game/${game.game_id}`)
+      await navigateTo(`/game/${game.game_id}/live`)
     }
   })
 
@@ -77,7 +77,7 @@ onMounted(async () => {
   matchmakingChannel.on('match_found', async (game: AcceptedGame) => {
     searchingMatch.value = false
     matchmakingMessage.value = 'Partida encontrada!'
-    await navigateTo(`/game/${game.game_id}`)
+    await navigateTo(`/game/${game.game_id}/live`)
   })
   matchmakingChannel.on('queue_waiting', (payload: { message?: string }) => {
     matchmakingMessage.value = payload.message || 'A busca continua com uma faixa maior de rating.'
@@ -166,7 +166,7 @@ async function copyPrivateRoomLink() {
 }
 
 async function enterPrivateGame(match: { game_id: string }) {
-  await navigateTo(`/game/${match.game_id}`)
+  await navigateTo(`/game/${match.game_id}/live`)
 }
 
 function accept(challengeId: string) {
@@ -209,8 +209,6 @@ async function logOut() {
 
 <template>
   <main class="lobby-shell">
-    <NavigationAppSidebar active="challenges" @logout="logOut" />
-
     <div class="content">
       <header class="welcome" id="dashboard">
         <div>
@@ -310,7 +308,7 @@ async function logOut() {
 </template>
 
 <style scoped>
-.lobby-shell { --cream: #f4eddf; --panel: #fffaf0; --line: #dfcfb8; --ink: #3c2b20; --brown: #925b35; display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; color: var(--ink); background-color: var(--cream); background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }
+.lobby-shell { --cream: #f4eddf; --panel: #fffaf0; --line: #dfcfb8; --ink: #3c2b20; --brown: #925b35; min-height: 100vh; color: var(--ink); background-color: var(--cream); background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }
 .content { display: grid; align-content: start; gap: 1.4rem; padding: 2rem; }
 .welcome, .panel { padding: 1.6rem; background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 18px; box-shadow: 0 14px 30px #60401f12; }
 .welcome { display: flex; align-items: center; justify-content: space-between; }.welcome h1, h2 { margin: 0; font-family: Georgia, serif; font-weight: 500; }.welcome p { margin: 0.4rem 0 0; color: #857060; }
@@ -324,5 +322,5 @@ button { padding: 0.7rem 1rem; color: var(--ink); background: #f7eedf; border: 1
 .time-control { display: flex; align-items: center; justify-content: flex-end; gap: .7rem; margin: 0 0 1.2rem; color: #806d5d; font-size: .85rem; }.time-control select { padding: .65rem .8rem; color: var(--ink); background: #fffaf0; border: 1px solid var(--line); border-radius: 9px; font: inherit; }
 .matchmaking-panel { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1rem; }.matchmaking-panel p { margin: .35rem 0 0; color: #857060; }.matchmaking-panel .time-control { margin: 0; }.search { color: white; font-weight: 700; background: var(--brown); }.cancel-search { color: white; font-weight: 700; background: #a74c35; }.search-status { display: flex; grid-column: 1 / -1; align-items: center; gap: .5rem; padding-top: .8rem; border-top: 1px solid var(--line); }.search-status span { width: 9px; height: 9px; background: #668a57; border-radius: 50%; box-shadow: 0 0 8px #668a57; animation: pulse 1.2s infinite; }@keyframes pulse { 50% { opacity: .35; transform: scale(.8); } }
 .private-room-panel { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1rem; }.private-room-panel p { margin: .35rem 0 0; color: #857060; }.private-room-button { color: white; font-weight: 700; background: #765039; }.room-waiting { display: grid; grid-column: 1 / -1; gap: .7rem; padding-top: .4rem; }.room-waiting .search-status { margin: 0; }.room-link-row { display: grid; grid-template-columns: 1fr auto; gap: .6rem; }.room-link-row input { min-width: 0; padding: .75rem; color: var(--ink); background: #fffaf0; border: 1px solid var(--line); border-radius: 9px; font: inherit; }.room-waiting small { color: #806d5d; }
-@media (max-width: 760px) { .lobby-shell { grid-template-columns: 1fr; }.mobile-hidden { display: none; }.content { padding: 1rem; }.welcome { align-items: flex-start; gap: 1rem; }.welcome > div:first-child p { display: none; }.profile > div { display: none; }.matchmaking-panel, .private-room-panel { grid-template-columns: 1fr; }.matchmaking-panel .time-control { justify-content: stretch; }.matchmaking-panel select { flex: 1; }.room-link-row { grid-template-columns: 1fr; }.online-grid { grid-template-columns: 1fr; }.section-heading { align-items: flex-start; }.player-row { flex-wrap: wrap; }.actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }.actions button { width: 100%; } }
+@media (max-width: 760px) { .content { padding: 1rem; }.welcome { align-items: flex-start; gap: 1rem; }.welcome > div:first-child p { display: none; }.profile > div { display: none; }.matchmaking-panel, .private-room-panel { grid-template-columns: 1fr; }.matchmaking-panel .time-control { justify-content: stretch; }.matchmaking-panel select { flex: 1; }.room-link-row { grid-template-columns: 1fr; }.online-grid { grid-template-columns: 1fr; }.section-heading { align-items: flex-start; }.player-row { flex-wrap: wrap; }.actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }.actions button { width: 100%; } }
 </style>

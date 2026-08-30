@@ -2,7 +2,7 @@
 import { Socket, type Channel } from 'phoenix'
 import type { Color, Key } from '@lichess-org/chessground/types'
 
-definePageMeta({ middleware: 'game-session' })
+definePageMeta({ middleware: 'game-session', layout: false })
 
 type Player = {
   id: string
@@ -58,6 +58,7 @@ type RatingUpdate = {
 const route = useRoute()
 const auth = useAuthStore()
 const config = useRuntimeConfig()
+// Nesta rota, gameId é Game.game_id: o identificador público usado pelo GameServer e pelo tópico Phoenix.
 const gameId = computed(() => String(route.params.gameId))
 
 const fen = ref('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
