@@ -98,6 +98,24 @@ outro local, defina `STOCKFISH_PATH` (por exemplo, `/usr/games/stockfish`). No
 Docker Compose ele já é instalado na imagem do backend. As análises pós-partida
 são executadas de forma assíncrona pela fila `analysis` do Oban.
 
+### Força dos bots
+
+O container usa Stockfish 15.1. As opções UCI disponíveis incluem `Skill Level`
+(0–20), `UCI_LimitStrength`, `UCI_Elo` (1350–2850), `Threads` e `Hash`. Como o
+limite UCI não alcança os níveis iniciantes, o catálogo aplica este mapeamento:
+
+| Bot | Força exibida | Configuração Stockfish |
+|---|---:|---|
+| Clark | 800 | `Skill Level 0`, busca de 70 ms |
+| Jonathan | 1200 | `Skill Level 3`, busca de 110 ms |
+| Renan | 1600 | `UCI_LimitStrength=true`, `UCI_Elo=1600`, busca de 180 ms |
+| Boris | 2400 | `UCI_LimitStrength=true`, `UCI_Elo=2400`, busca de 350 ms |
+| Terminator | 2800 | `UCI_LimitStrength=true`, `UCI_Elo=2800`, busca de 600 ms |
+
+Esses números representam níveis aproximados de produto, não uma certificação
+de Elo. Toda jogada calculada retorna ao `GameServer`, que continua responsável
+por validar o lance, descontar o relógio e finalizar a partida.
+
 O backend sobe em `http://localhost:4000`. Health check:
 
 ```bash

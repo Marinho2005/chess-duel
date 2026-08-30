@@ -5,6 +5,7 @@ defmodule ChessDuelBackendWeb.UserJSON do
       email: user.email,
       nickname: user.nickname,
       country: user.country,
+      country_code: user.country_code,
       avatar_url: user.avatar_path,
       rating: user.rating,
       inserted_at: user.inserted_at
@@ -16,6 +17,7 @@ defmodule ChessDuelBackendWeb.UserJSON do
       id: user.id,
       nickname: user.nickname,
       country: user.country,
+      country_code: user.country_code,
       avatar_url: user.avatar_path,
       rating: user.rating,
       inserted_at: user.inserted_at
@@ -26,6 +28,7 @@ defmodule ChessDuelBackendWeb.UserJSON do
     %{
       id: user.id,
       nickname: user.nickname,
+      country_code: user.country_code,
       avatar_url: user.avatar_path,
       rating: user.rating
     }

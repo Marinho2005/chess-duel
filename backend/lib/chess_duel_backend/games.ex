@@ -7,6 +7,7 @@ defmodule ChessDuelBackend.Games do
 
   alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackend.Games.Game
+  alias ChessDuelBackend.Games.Bots
   alias ChessDuelBackend.Ratings.RatingChange
   alias ChessDuelBackend.Repo
 
@@ -71,7 +72,7 @@ defmodule ChessDuelBackend.Games do
     opponent_ids =
       games
       |> Enum.map(&opponent_id(&1, user_id))
-      |> Enum.reject(&is_nil/1)
+      |> Enum.filter(&match?({:ok, _}, Ecto.UUID.cast(&1)))
       |> Enum.uniq()
 
     opponents =
@@ -93,12 +94,21 @@ defmodule ChessDuelBackend.Games do
       color = player_color(game, user_id)
       opponent_id = opponent_id(game, user_id)
 
+      opponent =
+        if game.bot_id do
+          bot = Bots.get(game.bot_id)
+          %{id: Bots.player_id(game.bot_id), nickname: bot.name, bot: true, rating: bot.rating}
+        else
+          %{
+            id: opponent_id,
+            nickname: Map.get(opponents, opponent_id, "Jogador desconhecido"),
+            bot: false
+          }
+        end
+
       %{
         id: game.id,
-        opponent: %{
-          id: opponent_id,
-          nickname: Map.get(opponents, opponent_id, "Jogador desconhecido")
-        },
+        opponent: opponent,
         color: color,
         result: result_for_player(game.result, color),
         end_reason: game.end_reason,

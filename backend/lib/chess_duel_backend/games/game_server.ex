@@ -4,6 +4,7 @@ defmodule ChessDuelBackend.Games.GameServer do
   alias ChessDuelBackend.{GameRegistry, GameSupervisor}
   alias ChessDuelBackend.ChessValidator
   alias ChessDuelBackend.Games
+  alias ChessDuelBackend.Games.Bots
   alias ChessDuelBackend.Ratings
 
   require Logger
@@ -12,6 +13,7 @@ defmodule ChessDuelBackend.Games.GameServer do
   # Fallback para partidas iniciadas fora do lobby e para testes manuais curtos.
   @default_initial_time_ms 180_000
   @default_abandonment_grace_ms 60_000
+  @preparation_ms 10_000
 
   def start_link(game_id) when is_binary(game_id) do
     GenServer.start_link(__MODULE__, game_id, name: via_tuple(game_id))
@@ -25,9 +27,16 @@ defmodule ChessDuelBackend.Games.GameServer do
     GenServer.start_link(__MODULE__, {game_id, time_control, game_type}, name: via_tuple(game_id))
   end
 
+  def start_link({game_id, time_control, game_type, options}) do
+    GenServer.start_link(__MODULE__, {game_id, time_control, game_type, options},
+      name: via_tuple(game_id)
+    )
+  end
+
   def child_spec(game_id) do
     {id, start_arg} =
       case game_id do
+        {id, _time_control, _game_type, _options} = args -> {id, args}
         {id, _time_control, _game_type} = args -> {id, args}
         {id, _time_control} = args -> {id, args}
         id -> {id, id}
@@ -101,6 +110,52 @@ defmodule ChessDuelBackend.Games.GameServer do
     end
   end
 
+  def reserve_bot_game(game_id, user_id, bot, human_color, time_control) do
+    options = %{bot: bot, bot_color: opposite_color(human_color)}
+
+    with {:ok, pid} <- start_or_get_with_options(game_id, time_control, :bot, options) do
+      GenServer.call(pid, {:reserve_bot_game, user_id, bot, human_color})
+    end
+  end
+
+  def abort_game(game_id, player_id) do
+    with {:ok, pid} <- start_or_get(game_id), do: GenServer.call(pid, {:abort, player_id})
+  end
+
+  def resign(game_id, player_id) do
+    with {:ok, pid} <- start_or_get(game_id), do: GenServer.call(pid, {:resign, player_id})
+  end
+
+  def apply_bot_move(game_id, expected_fen, token, from, to, promotion) do
+    with {:ok, pid} <- start_or_get(game_id) do
+      GenServer.call(pid, {:apply_bot_move, expected_fen, token, from, to, promotion}, 7_000)
+    end
+  end
+
+  def bot_move_failed(game_id, expected_fen, token) do
+    case Registry.lookup(GameRegistry, game_id) do
+      [{pid, _}] -> GenServer.cast(pid, {:bot_move_failed, expected_fen, token})
+      [] -> :ok
+    end
+  end
+
+  defp start_or_get_with_options(game_id, time_control, game_type, options) do
+    case Registry.lookup(GameRegistry, game_id) do
+      [{pid, _}] ->
+        {:ok, pid}
+
+      [] ->
+        case DynamicSupervisor.start_child(
+               GameSupervisor,
+               {__MODULE__, {game_id, time_control, game_type, options}}
+             ) do
+          {:ok, pid} -> {:ok, pid}
+          {:error, {:already_started, pid}} -> {:ok, pid}
+          other -> other
+        end
+    end
+  end
+
   def player_disconnected(game_id, player_id) do
     with {:ok, pid} <- start_or_get(game_id) do
       GenServer.cast(pid, {:player_disconnected, player_id})
@@ -118,7 +173,9 @@ defmodule ChessDuelBackend.Games.GameServer do
 
   def init({game_id, time_control}), do: init({game_id, time_control, :registered})
 
-  def init({game_id, time_control, game_type}) do
+  def init({game_id, time_control, game_type}), do: init({game_id, time_control, game_type, %{}})
+
+  def init({game_id, time_control, game_type, options}) do
     configured_initial_time_ms =
       Application.get_env(
         :chess_duel_backend,
@@ -140,6 +197,7 @@ defmodule ChessDuelBackend.Games.GameServer do
 
     initial_state = %{
       game_id: game_id,
+      database_id: nil,
       game_type: game_type,
       white_player_id: nil,
       black_player_id: nil,
@@ -164,7 +222,14 @@ defmodule ChessDuelBackend.Games.GameServer do
       increment_ms: increment_ms,
       turn_started_at: nil,
       clock_timer_ref: nil,
-      persistence_pid: nil
+      persistence_pid: nil,
+      bot_id: get_in(options, [:bot, :id]),
+      bot_color: options[:bot_color],
+      bot: options[:bot],
+      bot_request: nil,
+      bot_task_pid: nil,
+      preparation_ends_at: nil,
+      preparation_timer_ref: nil
     }
 
     if game_type == :guest do
@@ -191,6 +256,7 @@ defmodule ChessDuelBackend.Games.GameServer do
         state =
           initial_state
           |> restore_from_game(game)
+          |> Map.put(:database_id, game.id)
           |> Map.put(:persistence_pid, persistence_pid)
           |> resume_clock_after_restore()
 
@@ -207,7 +273,11 @@ defmodule ChessDuelBackend.Games.GameServer do
         _from,
         %{game_type: :registered, white_player_id: nil, black_player_id: nil, moves: []} = state
       ) do
-    state = %{state | white_player_id: white_player_id, black_player_id: black_player_id}
+    state =
+      state
+      |> Map.merge(%{white_player_id: white_player_id, black_player_id: black_player_id})
+      |> begin_preparation()
+
     persist_state(state)
     {:reply, {:ok, snapshot_clock(state)}, state}
   end
@@ -241,13 +311,15 @@ defmodule ChessDuelBackend.Games.GameServer do
         _from,
         %{game_type: :guest, white_player_id: nil, black_player_id: nil, moves: []} = state
       ) do
-    state = %{
-      state
-      | white_player_id: white_guest.id,
-        black_player_id: black_guest.id,
-        white_player: public_guest(white_guest),
-        black_player: public_guest(black_guest)
-    }
+    state =
+      %{
+        state
+        | white_player_id: white_guest.id,
+          black_player_id: black_guest.id,
+          white_player: public_guest(white_guest),
+          black_player: public_guest(black_guest)
+      }
+      |> begin_preparation()
 
     {:reply, {:ok, snapshot_clock(state)}, state}
   end
@@ -257,12 +329,98 @@ defmodule ChessDuelBackend.Games.GameServer do
   end
 
   def handle_call(
+        {:reserve_bot_game, user_id, bot, human_color},
+        _from,
+        %{game_type: :bot, white_player_id: nil, black_player_id: nil} = state
+      ) do
+    bot_id = Bots.player_id(bot.id)
+
+    {white_id, black_id} =
+      if human_color == "white", do: {user_id, bot_id}, else: {bot_id, user_id}
+
+    state =
+      state
+      |> Map.merge(%{
+        white_player_id: white_id,
+        black_player_id: black_id,
+        bot_id: bot.id,
+        bot_color: opposite_color(human_color),
+        bot: bot
+      })
+      |> begin_preparation()
+
+    persist_state(state)
+    {:reply, {:ok, snapshot_clock(state)}, state}
+  end
+
+  def handle_call({:reserve_bot_game, _user_id, _bot, _color}, _from, state),
+    do: {:reply, {:error, :game_full}, state}
+
+  def handle_call(
         {:make_move, _from, _to, _player, _promotion},
         _caller,
         %{status: "finished"} = state
       ) do
     {:reply, {:error, :game_finished}, state}
   end
+
+  def handle_call(
+        {:make_move, _from, _to, _player, _promotion},
+        _caller,
+        %{status: "waiting"} = state
+      ) do
+    {:reply, {:error, :game_preparing}, state}
+  end
+
+  def handle_call({:abort, player_id}, _from, %{status: "waiting"} = state) do
+    deadline_open =
+      is_nil(state.preparation_ends_at) or
+        DateTime.compare(DateTime.utc_now(), state.preparation_ends_at) == :lt
+
+    if player_color(state, player_id) && deadline_open do
+      finished = finish_state(state, "aborted", nil)
+      persist_state(finished)
+      broadcast_game_over(finished, "aborted", nil)
+      {:reply, {:ok, snapshot_clock(finished)}, finished}
+    else
+      reason = if player_color(state, player_id), do: :abort_unavailable, else: :not_a_player
+      {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:abort, _player_id}, _from, state),
+    do: {:reply, {:error, :abort_unavailable}, state}
+
+  def handle_call({:resign, player_id}, _from, %{status: "in_progress"} = state) do
+    case player_color(state, player_id) do
+      nil ->
+        {:reply, {:error, :not_a_player}, state}
+
+      color ->
+        winner_id = player_id_for_color(state, opposite_color(color))
+        finished = state |> snapshot_clock() |> finish_state("resignation", winner_id)
+        persist_state(finished)
+        broadcast_game_over(finished, "resignation", winner_id)
+        {:reply, {:ok, snapshot_clock(finished)}, finished}
+    end
+  end
+
+  def handle_call({:resign, _player_id}, _from, state),
+    do: {:reply, {:error, :resign_unavailable}, state}
+
+  def handle_call(
+        {:apply_bot_move, expected_fen, token, from, to, promotion},
+        _caller,
+        %{status: "in_progress", fen: expected_fen, bot_request: token} = state
+      ) do
+    validate_and_apply_move(from, to, Bots.player_id(state.bot_id), promotion, %{
+      state
+      | bot_task_pid: nil
+    })
+  end
+
+  def handle_call({:apply_bot_move, _fen, _token, _from, _to, _promotion}, _caller, state),
+    do: {:reply, {:error, :stale_bot_move}, state}
 
   def handle_call({:make_move, from, to, player, promotion}, _caller, state) do
     case player_color(state, player) do
@@ -283,7 +441,7 @@ defmodule ChessDuelBackend.Games.GameServer do
         state
       )
       when (identity_type == :guest and state.game_type != :guest) or
-             (identity_type == :user and state.game_type != :registered) do
+             (identity_type == :user and state.game_type not in [:registered, :bot]) do
     {:reply, {:error, :identity_mismatch}, state}
   end
 
@@ -333,6 +491,16 @@ defmodule ChessDuelBackend.Games.GameServer do
     {:noreply, state}
   end
 
+  def handle_cast(
+        {:bot_move_failed, fen, token},
+        %{status: "in_progress", fen: fen, bot_request: token} = state
+      ) do
+    Process.send_after(self(), :retry_bot_move, 500)
+    {:noreply, %{state | bot_request: nil, bot_task_pid: nil}}
+  end
+
+  def handle_cast({:bot_move_failed, _fen, _token}, state), do: {:noreply, state}
+
   defp validate_and_apply_move(from, to, player, promotion, state) do
     case ChessValidator.validate_move(state.fen, from, to, promotion) do
       {:ok, result} ->
@@ -350,6 +518,7 @@ defmodule ChessDuelBackend.Games.GameServer do
               player: player,
               promotion: promotion,
               captured: result.captured,
+              san: result.san,
               timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
             }
 
@@ -374,9 +543,11 @@ defmodule ChessDuelBackend.Games.GameServer do
                 is_stalemate: result.is_stalemate,
                 is_draw: result.is_draw,
                 turn_started_at: now,
-                clock_timer_ref: nil
+                clock_timer_ref: nil,
+                bot_request: nil
               })
               |> schedule_current_clock_unless_finished()
+              |> maybe_request_bot_move()
 
             persist_state(new_state)
 
@@ -390,6 +561,24 @@ defmodule ChessDuelBackend.Games.GameServer do
 
   @impl true
   def handle_info(:time_expired, %{status: "finished"} = state), do: {:noreply, state}
+
+  def handle_info(:preparation_complete, %{status: "waiting"} = state) do
+    now = System.monotonic_time(:millisecond)
+
+    state =
+      state
+      |> Map.merge(%{status: "in_progress", turn_started_at: now, preparation_timer_ref: nil})
+      |> schedule_current_clock()
+      |> maybe_request_bot_move()
+
+    persist_state(state)
+    broadcast_state(state, "game_started")
+    {:noreply, state}
+  end
+
+  def handle_info(:preparation_complete, state), do: {:noreply, state}
+
+  def handle_info(:retry_bot_move, state), do: {:noreply, maybe_request_bot_move(state)}
 
   def handle_info({:abandonment_expired, _color}, %{status: "finished"} = state) do
     {:noreply, state}
@@ -484,10 +673,15 @@ defmodule ChessDuelBackend.Games.GameServer do
 
   defp finish_state(state, reason, winner_player_id) do
     cancel_clock_timer(state.clock_timer_ref)
+    cancel_clock_timer(state.preparation_timer_ref)
 
     Enum.each(state.abandonment_timer_refs, fn {_color, timer_ref} ->
       Process.cancel_timer(timer_ref)
     end)
+
+    if is_pid(state.bot_task_pid) && Process.alive?(state.bot_task_pid) do
+      Process.exit(state.bot_task_pid, :shutdown)
+    end
 
     %{
       state
@@ -495,6 +689,9 @@ defmodule ChessDuelBackend.Games.GameServer do
         game_over_reason: reason,
         winner_player_id: winner_player_id,
         clock_timer_ref: nil,
+        preparation_timer_ref: nil,
+        bot_request: nil,
+        bot_task_pid: nil,
         turn_started_at: nil,
         abandonment_timer_refs: %{}
     }
@@ -503,16 +700,73 @@ defmodule ChessDuelBackend.Games.GameServer do
   defp broadcast_game_over(state, reason, winner_player_id) do
     topic = "game:#{state.game_id}"
 
-    Phoenix.PubSub.broadcast(
-      ChessDuelBackend.PubSub,
-      topic,
-      %Phoenix.Socket.Broadcast{
-        topic: topic,
-        event: "game_over",
-        payload: %{reason: reason, winner_player_id: winner_player_id}
-      }
-    )
+    ChessDuelBackendWeb.Endpoint.broadcast(topic, "game_over", %{
+      reason: reason,
+      winner_player_id: winner_player_id
+    })
   end
+
+  defp broadcast_state(state, event) do
+    snapshot = snapshot_clock(state)
+
+    ChessDuelBackendWeb.Endpoint.broadcast("game:#{state.game_id}", event, %{
+      status: snapshot.status,
+      current_turn: snapshot.current_turn,
+      white_time_remaining_ms: snapshot.white_time_remaining_ms,
+      black_time_remaining_ms: snapshot.black_time_remaining_ms
+    })
+  end
+
+  defp begin_preparation(%{status: "waiting", preparation_timer_ref: nil} = state) do
+    duration = Application.get_env(:chess_duel_backend, :game_preparation_ms, @preparation_ms)
+    ends_at = DateTime.add(DateTime.utc_now(), duration, :millisecond)
+
+    if duration == 0 do
+      state
+      |> Map.merge(%{
+        status: "in_progress",
+        preparation_ends_at: ends_at,
+        turn_started_at: System.monotonic_time(:millisecond)
+      })
+      |> schedule_current_clock()
+      |> maybe_request_bot_move()
+    else
+      timer_ref = Process.send_after(self(), :preparation_complete, duration)
+
+      %{
+        state
+        | preparation_ends_at: ends_at,
+          preparation_timer_ref: timer_ref,
+          turn_started_at: nil
+      }
+    end
+  end
+
+  defp begin_preparation(state), do: state
+
+  defp maybe_request_bot_move(
+         %{
+           game_type: :bot,
+           status: "in_progress",
+           current_turn: color,
+           bot_color: color,
+           bot_request: nil
+         } = state
+       ) do
+    token = make_ref()
+    game_id = state.game_id
+    fen = state.fen
+    bot = state.bot || Bots.get(state.bot_id)
+
+    {:ok, task_pid} =
+      Task.start(fn ->
+        ChessDuelBackend.Games.BotMoveTask.run(game_id, fen, token, bot)
+      end)
+
+    %{state | bot_request: token, bot_task_pid: task_pid}
+  end
+
+  defp maybe_request_bot_move(state), do: state
 
   defp time_key("white"), do: :white_time_remaining_ms
   defp time_key("black"), do: :black_time_remaining_ms
@@ -616,7 +870,10 @@ defmodule ChessDuelBackend.Games.GameServer do
       white_time_remaining_ms: state.white_time_remaining_ms,
       black_time_remaining_ms: state.black_time_remaining_ms,
       initial_time_ms: state.initial_time_ms,
-      increment_ms: state.increment_ms
+      increment_ms: state.increment_ms,
+      bot_id: state.bot_id,
+      bot_color: state.bot_color,
+      preparation_ends_at: state.preparation_ends_at
     }
 
     if state.status == "finished" do
@@ -665,6 +922,8 @@ defmodule ChessDuelBackend.Games.GameServer do
   defp persisted_result(%{game_over_reason: "abandonment", winner_player_id: nil}),
     do: "abandoned"
 
+  defp persisted_result(%{game_over_reason: "aborted"}), do: "abandoned"
+
   defp persisted_result(%{game_over_reason: reason}) when reason in ["stalemate", "draw"],
     do: "draw"
 
@@ -704,7 +963,8 @@ defmodule ChessDuelBackend.Games.GameServer do
   defp restore_from_game(state, game) do
     %{
       state
-      | white_player_id: game.white_player_id,
+      | game_type: if(game.bot_id, do: :bot, else: state.game_type),
+        white_player_id: game.white_player_id,
         black_player_id: game.black_player_id,
         moves: normalize_moves(game.moves || []),
         current_turn: game.current_turn,
@@ -718,7 +978,11 @@ defmodule ChessDuelBackend.Games.GameServer do
         white_time_remaining_ms: game.white_time_remaining_ms || state.white_time_remaining_ms,
         black_time_remaining_ms: game.black_time_remaining_ms || state.black_time_remaining_ms,
         initial_time_ms: game.initial_time_ms || state.initial_time_ms,
-        increment_ms: game.increment_ms || state.increment_ms
+        increment_ms: game.increment_ms || state.increment_ms,
+        bot_id: game.bot_id,
+        bot_color: game.bot_color,
+        bot: Bots.get(game.bot_id),
+        preparation_ends_at: game.preparation_ends_at
     }
   end
 
@@ -730,6 +994,7 @@ defmodule ChessDuelBackend.Games.GameServer do
         player: move[:player] || move["player"],
         promotion: move[:promotion] || move["promotion"],
         captured: move[:captured] || move["captured"],
+        san: move[:san] || move["san"],
         timestamp: move[:timestamp] || move["timestamp"]
       }
     end)
@@ -743,6 +1008,14 @@ defmodule ChessDuelBackend.Games.GameServer do
     state
     |> Map.put(:turn_started_at, System.monotonic_time(:millisecond))
     |> schedule_current_clock()
+    |> maybe_request_bot_move()
+  end
+
+  defp resume_clock_after_restore(
+         %{status: "waiting", preparation_ends_at: %DateTime{} = ends_at} = state
+       ) do
+    remaining = max(DateTime.diff(ends_at, DateTime.utc_now(), :millisecond), 0)
+    %{state | preparation_timer_ref: Process.send_after(self(), :preparation_complete, remaining)}
   end
 
   defp resume_clock_after_restore(state), do: state

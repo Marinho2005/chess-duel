@@ -5,6 +5,7 @@ export type AuthUser = {
   email: string
   nickname: string
   country: string | null
+  country_code: string | null
   avatar_url: string | null
   rating: number
   inserted_at: string
@@ -178,7 +179,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function updateProfile(nickname: string, country: string) {
+  async function updateProfile(nickname: string, countryCode: string, country: string) {
     error.value = ''
 
     if (!token.value) {
@@ -190,7 +191,7 @@ export const useAuthStore = defineStore('auth', () => {
         baseURL: config.public.api.baseURL,
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token.value}` },
-        body: { user: { nickname, country: country || null } }
+        body: { user: { nickname, country_code: countryCode || null, country: country || null } }
       })
 
       user.value = response.user

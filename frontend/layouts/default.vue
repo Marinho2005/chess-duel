@@ -9,7 +9,7 @@
 
 <style scoped>
 .app-layout {
-  --sidebar-width: 240px;
+  --sidebar-width: 264px;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;

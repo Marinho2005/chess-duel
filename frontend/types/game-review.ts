@@ -13,7 +13,7 @@ export type AnalyzedMove = {
   classification: 'best' | 'good' | 'inaccuracy' | 'mistake' | 'blunder'
 }
 
-export type ReviewPlayer = { id: string; nickname: string; avatar_url: string | null }
+export type ReviewPlayer = { id: string; nickname: string; avatar_url: string | null; country_code?: string | null }
 export type ReviewResponse = {
   id: string
   status: 'pending' | 'processing' | 'completed' | 'failed'

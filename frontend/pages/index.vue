@@ -137,20 +137,23 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
       <p v-if="auth.error || oauthError" class="error">{{ auth.error || oauthError }}</p>
     </form>
 
-    <p class="tagline">Entre, encontre um oponente e comece seu duelo.</p>
+   
   </main>
 </template>
 
 <style scoped>
 .auth-shell {
   --ink: #3c2b20;
-  --brown: #925b35;
+  --brown: #6f4528;
   display: grid;
-  min-height: 100vh;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100dvh;
   place-content: center;
   justify-items: center;
   gap: 2rem;
   padding: 2rem 1rem;
+  overflow: hidden;
   color: var(--ink);
   background-color: #f4eddf;
   background-image: radial-gradient(#bba98e40 0.7px, transparent 0.7px);
@@ -160,30 +163,31 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
 .brand { text-align: center; }
 .brand-title { font: 700 clamp(3rem, 8vw, 5rem)/1 Georgia, serif; color: var(--brown); }
 .brand-title span { font-size: 0.75em; }
-.brand p { margin: 0.65rem 0 0; color: #8d684d; font: italic 1.25rem Georgia, serif; letter-spacing: 0.08em; }
-.auth-card { display: grid; width: min(420px, calc(100vw - 2rem)); gap: 1rem; padding: 2rem; background: #fffaf0dd; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px #60401f1c; }
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; padding: 0.3rem; background: #efe2ce; border-radius: 12px; }
+.brand p { margin: 0.65rem 0 0; color: #5f4a37; font: italic 1.25rem Georgia, serif; letter-spacing: 0.08em; }
+.auth-card { display: grid; width: min(420px, calc(100vw - 2rem)); gap: 1rem; padding: 2rem; background: #fffaf0dd; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px #6f45281c; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; padding: 0.3rem; background: #efe2ce; border: 1px solid #dfd2c1; border-radius: 12px; }
 .tabs button { border: 0; background: transparent; box-shadow: none; }
-.tabs button.active { color: var(--ink); background: #fffaf1; }
+.tabs button.active { color: #fffaf0; background: var(--brown); box-shadow: 0 6px 14px #6f452822; }
 label { display: grid; gap: 0.45rem; color: #6e5847; font-size: 0.9rem; }
-input, button { padding: 0.9rem 1rem; color: inherit; background: #fff; border: 1px solid #dfd2c1; border-radius: 10px; font: inherit; }
+input, button { padding: 0.9rem 1rem; color: inherit; background: #fff; border: 1px solid #dfd2c1; border-radius: 10px; font: inherit; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
 button { cursor: pointer; }
-.primary { color: white; font-weight: 700; background: var(--brown); border-color: var(--brown); box-shadow: 0 8px 16px #7b472a30; }
+.primary { color: white; font-weight: 700; background: var(--brown); border-color: var(--brown); box-shadow: 0 8px 16px #6f45282b; }
+.primary:hover:not(:disabled) { background: #7f5130; border-color: #7f5130; transform: translateY(-1px); }
 .primary:disabled { opacity: 0.65; cursor: wait; }
 .divider { display: flex; align-items: center; gap: 0.75rem; color: #9a8471; font-size: 0.8rem; }
 .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #dfd2c1; }
 .social-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; }
 .social { display: inline-flex; min-width: 0; align-items: center; justify-content: center; gap: .45rem; padding-inline: .55rem; font-size: .84rem; font-weight: 700; background: #fff; }
-.social.google { color: #65452f; }
+.social.google { color: #7f5130; }
 .social.discord { color: #5865f2; }
 .social.github { color: #24292f; }
 .google-icon, .social-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
-.social:hover { transform: translateY(-1px); box-shadow: 0 5px 12px #60401f1c; }
+.social:hover { transform: translateY(-1px); box-shadow: 0 5px 12px #6f45281c; }
 .guest-link { padding: 0.35rem; color: #806d5d; background: transparent; border: 0; text-decoration: underline; text-underline-offset: 3px; }
-.guest-link:hover { color: var(--brown); }
+.guest-link:hover { color: var(--brown); background: #efe2ce; }
 .hint { margin: -0.4rem 0 0; color: #8b7664; font-size: 0.82rem; }
 .error { margin: 0; color: #b33e2e; text-align: center; }
-.session-message { margin: 0; padding: 0.8rem; color: #74472e; text-align: center; background: #efe2ce; border-radius: 10px; }
+.session-message { margin: 0; padding: 0.8rem; color: #7f5130; text-align: center; background: #efe2ce; border-radius: 10px; }
 .success-message { margin: 0; padding: 0.8rem; color: #345b36; text-align: center; background: #e4f0df; border: 1px solid #c6ddbf; border-radius: 10px; }
 .tagline { max-width: 520px; margin: 0; color: #806d5d; text-align: center; }
 @media (max-width: 390px) { .social { gap: .3rem; padding-inline: .35rem; font-size: .76rem; }.google-icon, .social-icon { width: 1.05rem; height: 1.05rem; } }

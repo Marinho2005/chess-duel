@@ -4,6 +4,7 @@ defmodule ChessDuelBackendWeb.GameAnalysisController do
 
   alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackend.GameAnalysis
+  alias ChessDuelBackend.Games.Bots
   alias ChessDuelBackend.Repo
 
   def create(conn, %{"id" => id}) do
@@ -28,15 +29,30 @@ defmodule ChessDuelBackendWeb.GameAnalysisController do
   defp payload(analysis, game, user_id) do
     players =
       [game.white_player_id, game.black_player_id]
-      |> Enum.reject(&is_nil/1)
+      |> Enum.filter(&match?({:ok, _}, Ecto.UUID.cast(&1)))
       |> then(fn ids ->
         Repo.all(
           from user in User,
             where: user.id in ^ids,
-            select: {user.id, %{id: user.id, nickname: user.nickname, avatar_url: user.avatar_path}}
+            select:
+              {user.id,
+               %{
+                 id: user.id,
+                 nickname: user.nickname,
+                 avatar_url: user.avatar_path,
+                 country_code: user.country_code
+               }}
         )
       end)
       |> Map.new()
+      |> then(fn players ->
+        if game.bot_id do
+          bot = Bots.get(game.bot_id)
+          Map.put(players, Bots.player_id(game.bot_id), Bots.public(bot))
+        else
+          players
+        end
+      end)
 
     %{
       id: analysis.id,
