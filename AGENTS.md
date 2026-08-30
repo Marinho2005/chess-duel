@@ -72,7 +72,9 @@ Regras obrigatórias:
 - Não trocar para a `develop` sem necessidade durante uma feature em andamento; usá-la para atualização e como base de uma nova branch
 - Integrar uma feature à `develop` somente por Pull Request revisado
 - Integrar `develop` à `main` somente quando houver uma versão estável
-- Antes de executar qualquer alteração, o agente deve conferir a branch atual e o estado do repositório, preservando o trabalho não commitado das outras pessoas
+- Antes de solicitar qualquer alteração, o desenvolvedor deve conferir a branch atual e o estado do repositório e informar ao agente quando houver trabalho não commitado que precise ser preservado
+- O agente de código nunca deve executar comandos Git, incluindo `git status`, `git add`, `git commit`, `git push`, `git pull`, `git fetch`, `git switch`, `git merge` ou equivalentes
+- Toda a gestão Git é feita manualmente pelo desenvolvedor no terminal; o agente pode orientar o fluxo, revisar saídas fornecidas e sugerir mensagens de commit
 
 Fluxo resumido:
 
@@ -146,6 +148,7 @@ develop estável -> Pull Request -> main
 - [x] **UI real de jogo** — Rota `/game/:gameId/live` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 - [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
+- [x] **Navegação para funcionalidades futuras** — Os itens "Puzzles" e "Bots" existem como placeholders visuais na navegação. Puzzles aguarda as etapas correspondentes da Fase 4; bots ainda não possui etapa formalmente numerada no roadmap.
 
 ---
 
@@ -156,6 +159,3 @@ develop estável -> Pull Request -> main
 3. Quando houver ambiguidade de implementação sem uma resposta óbvia, escolher a abordagem mais simples e idiomática em Phoenix/Elixir, e comentar brevemente a decisão no código
 4. Não modificar lógica já validada e funcionando (marcada com `[x]` no roadmap acima) a menos que a tarefa seja explicitamente sobre corrigir ou alterar essa parte
 5. **Ao concluir uma tarefa, atualizar a marcação da etapa correspondente neste arquivo** (`[ ]` → `[~]` → `[x]`), como parte do commit da feature — isso mantém o roadmap sempre refletindo o estado real do projeto para qualquer sessão futura, sua ou de outro desenvolvedor
-
-
-**O agente de código NUNCA deve executar comandos git add, git commit, git push, git merge ou qualquer outro comando Git. Toda a gestão de Git é feita manualmente pelo desenvolvedor, no terminal, fora do controle do agente. O agente pode sugerir mensagens de commit ou indicar que uma tarefa está pronta para commit, mas nunca deve executar o comando.
