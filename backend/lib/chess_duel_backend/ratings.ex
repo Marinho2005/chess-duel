@@ -16,6 +16,7 @@ defmodule ChessDuelBackend.Ratings do
         nil -> Repo.rollback(:game_not_found)
         %Game{rated_at: rated_at} when not is_nil(rated_at) -> {:ok, :already_rated}
         %Game{status: status} when status != "finished" -> Repo.rollback(:game_not_finished)
+        %Game{bot_id: bot_id} when not is_nil(bot_id) -> Repo.rollback(:game_not_rateable)
         game -> rate_finished_game(game)
       end
     end)

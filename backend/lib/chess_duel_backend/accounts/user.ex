@@ -8,13 +8,14 @@ defmodule ChessDuelBackend.Accounts.User do
     field :email, :string
     field :nickname, :string
     field :country, :string
+    field :country_code, :string
     field :avatar_path, :string
-    field :google_id, :string
     field :rating, :integer, default: 1200
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :confirmed_at, :naive_datetime
     field :authenticated_at, :naive_datetime, virtual: true
+    has_many :oauth_identities, ChessDuelBackend.Accounts.OAuthIdentity
 
     timestamps()
   end
@@ -32,39 +33,32 @@ defmodule ChessDuelBackend.Accounts.User do
   @doc "Changeset dos dados publicos editaveis do perfil."
   def profile_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:nickname, :country])
+    |> cast(attrs, [:nickname, :country, :country_code])
     |> validate_nickname(opts)
     |> validate_length(:country, max: 56)
+    |> update_change(:country_code, &normalize_country_code/1)
+    |> validate_format(:country_code, ~r/^[A-Z]{2}$/,
+      message: "must be a two-letter ISO country code"
+    )
   end
 
   def avatar_changeset(user, avatar_path) do
     change(user, avatar_path: avatar_path)
   end
 
+  defp normalize_country_code(value) when is_binary(value),
+    do: value |> String.trim() |> String.upcase()
+
+  defp normalize_country_code(value), do: value
+
   @doc "Changeset para criar uma conta autenticada por um provedor OAuth."
   def oauth_registration_changeset(user, attrs) do
     user
-    |> cast(attrs, [:email, :nickname, :avatar_path, :google_id, :confirmed_at])
+    |> cast(attrs, [:email, :nickname, :avatar_path, :confirmed_at])
     |> validate_email([])
     |> validate_nickname([])
     |> validate_required([:confirmed_at])
     |> validate_length(:avatar_path, max: 2_048)
-    |> oauth_constraints()
-  end
-
-  @doc "Changeset para vincular uma identidade OAuth a uma conta existente."
-  def oauth_link_changeset(user, :google, uid) do
-    field = :google_id
-
-    user
-    |> change(%{field => uid, confirmed_at: NaiveDateTime.utc_now(:second)})
-    |> validate_required([field, :confirmed_at])
-    |> oauth_constraints()
-  end
-
-  defp oauth_constraints(changeset) do
-    changeset
-    |> unique_constraint(:google_id)
   end
 
   @doc false

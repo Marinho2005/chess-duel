@@ -29,10 +29,59 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - Backend foi gerado com `--no-html --no-assets` (modo API puro) — não adicionar views HTML tradicionais
 - Contextos seguem a convenção Phoenix: pasta com nome do domínio (ex: `games/`), schemas dentro dela (ex: `games/game.ex`)
 - NÃO mexer no contexto `Blog`/`ArticleController` de exemplo, gerado durante o aprendizado inicial do framework — não faz parte do produto
-- Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), a partir da `develop`, nunca commitada direto na `develop` ou `main`
-- A interface oficial das partidas fica em `frontend/pages/game/[gameId].vue`; a antiga página manual `test-game.vue` foi removida após a validação da UI real.
-- O projeto tem duas pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento de outra branch; sempre `git pull` na `develop` antes de criar uma branch nova
+- Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), criada a partir da `develop` atualizada; nunca trabalhar ou fazer push diretamente na `develop` ou `main`
+- A interface oficial das partidas ao vivo fica em `frontend/pages/game/[gameId]/live.vue`, na rota `/game/:gameId/live`; a análise pós-jogo fica em `frontend/pages/game/[gameId]/review.vue`, na rota `/game/:gameId/review`. As duas são rotas irmãs para impedir que o Nuxt monte a partida ao vivo como página pai da análise.
+- Na rota ao vivo, `:gameId` representa `Game.game_id`, identificador público usado pelo `GameServer` e pelo tópico Phoenix. Na rota de review, representa `Game.id`, chave primária UUID usada pelos endpoints de análise. Não intercambiar os dois valores.
+- As páginas principais usam `frontend/layouts/default.vue`, que renderiza o componente compartilhado `frontend/components/AppSidebar.vue`. Partidas ao vivo e reviews usam `layout: false` para permanecerem em tela cheia.
+- O projeto tem três pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento nas outras branches e manter cada funcionalidade isolada em sua própria branch
 - O ambiente completo de desenvolvimento pode ser iniciado com `docker compose up --build`; a execução local de backend e frontend continua disponível como alternativa.
+
+---
+
+## Fluxo Git da equipe
+
+O repositório segue este fluxo de branches:
+
+- `main`: versão estável do projeto
+- `develop`: integração das funcionalidades prontas
+- `feature/*`: desenvolvimento isolado de cada funcionalidade
+
+Antes de começar uma funcionalidade nova, atualizar a `develop` local e criar a branch a partir dela:
+
+```bash
+git switch develop
+git pull origin develop
+git switch -c feature/nome-da-feature
+```
+
+Durante o desenvolvimento, commits e pushes devem ser feitos somente na branch da feature:
+
+```bash
+git add .
+git commit -m "feat: descreve a funcionalidade"
+git push -u origin feature/nome-da-feature
+```
+
+Quando a funcionalidade estiver pronta, abrir um Pull Request de `feature/*` para `develop`. Pelo menos uma das outras pessoas deve revisar o PR antes do merge.
+
+Regras obrigatórias:
+
+- Não trabalhar, fazer commits ou dar push diretamente na `main` ou na `develop`
+- Não criar a branch da feature pelo site do GitHub; criá-la localmente a partir da `develop` atualizada e depois fazer o primeiro push
+- Usar uma branch `feature/*` separada para cada funcionalidade
+- Não trocar para a `develop` sem necessidade durante uma feature em andamento; usá-la para atualização e como base de uma nova branch
+- Integrar uma feature à `develop` somente por Pull Request revisado
+- Integrar `develop` à `main` somente quando houver uma versão estável
+- Antes de solicitar qualquer alteração, o desenvolvedor deve conferir a branch atual e o estado do repositório e informar ao agente quando houver trabalho não commitado que precise ser preservado
+- O agente de código nunca deve executar comandos Git, incluindo `git status`, `git add`, `git commit`, `git push`, `git pull`, `git fetch`, `git switch`, `git merge` ou equivalentes
+- Toda a gestão Git é feita manualmente pelo desenvolvedor no terminal; o agente pode orientar o fluxo, revisar saídas fornecidas e sugerir mensagens de commit
+
+Fluxo resumido:
+
+```text
+develop atualizada -> feature/* -> commits -> push -> Pull Request revisado -> develop
+develop estável -> Pull Request -> main
+```
 
 ---
 
@@ -63,23 +112,24 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 ### Fase 2 — Contas e ranking — COMPLETA
 
 - [x] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes. Contas locais precisam confirmar o e-mail antes de receber token ou acessar o sistema; em desenvolvimento, o link é exibido no log do backend.
-- [x] **2.2 OAuth (login social)** — Login com Google via Ueberauth, vinculado por ID/e-mail à mesma tabela de usuários e integrado ao bearer token do frontend.
+- [x] **2.2 OAuth (login social)** — Login com Google, Discord e GitHub via Ueberauth e identidades externas genéricas; somente Google verificado vincula automaticamente por e-mail. Todos reutilizam o bearer token do frontend.
 - [x] **2.3 Perfil de jogador** — Página pública com foto de perfil (inicial como fallback), apelido, país, rating e data de criação; edição autenticada do próprio perfil e proteção das rotas privadas.
 - [x] **2.4 Sistema de rating** — ELO com K=32 atualizado de forma assíncrona, atômica e idempotente ao fim da partida; snapshots e histórico de variações persistidos para auditoria.
 - [x] **2.5 Histórico de partidas** — Lista paginada das partidas finalizadas do usuário, com oponente, resultado sob sua perspectiva, motivo, variação de rating e data.
 
-### Fase 3 — Matchmaking sério
+### Fase 3 — Matchmaking sério — COMPLETA
 
 - [x] **3.1 Fila por rating** — Fila por formato no Valkey, com pareamento periódico por proximidade de rating, tolerância crescente e entrada/cancelamento pelo lobby em tempo real.
 - [x] **3.2 Tempo configurável** — Bullet 1+0, Blitz 3+0, Blitz 5+3 e Rapid 10+0 selecionáveis nos desafios; tempo inicial e incremento Fischer são autoritativos no `GameServer` e persistidos por partida.
-- [ ] **3.3 Salas privadas** — Criação de sala com link de convite, para jogar com amigos sem passar pela fila de matchmaking.
+- [x] **3.3 Salas privadas** — Criação de sala com link de convite, para jogar com amigos sem passar pela fila de matchmaking.
 
 ### Fase 4 — Puzzles e análise
 
-- [ ] **4.1 Worker Stockfish separado** — Processo isolado do game service, para não competir por recursos com partidas ao vivo.
-- [ ] **4.2 Análise pós-jogo assíncrona** — Fila de análise usando Stockfish depois que a partida termina.
+- [x] **4.1 Worker Stockfish separado** — Processo UCI isolado do game service, executado por uma fila Oban dedicada para não competir por recursos com partidas ao vivo.
+- [x] **4.2 Análise pós-jogo assíncrona** — Stockfish analisa partidas finalizadas em background; participantes acompanham o processamento e revisam a partida em uma tela interativa com replay, classificações e barra de avaliação.
 - [ ] **4.3 Banco de puzzles táticos** — Curadoria/geração de puzzles a partir de partidas reais.
 - [ ] **4.4 Puzzle Rush** — Modo de puzzles cronometrados, estilo chess.com.
+- [x] **4.5 Partidas contra bots** — Stockfish com cinco níveis de força, integrado ao `GameServer`, com personagens ilustrados, preparação autoritativa, abortar, desistir e partidas sem alteração de rating.
 
 ### Fase 5 — Monetização (SaaS)
 
@@ -96,8 +146,12 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 
 ### Fora do roadmap numerado, mas necessária em algum momento
 
-- [x] **UI real de jogo** — Rota `/game/:gameId` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
+- [x] **UI real de jogo** — Rota `/game/:gameId/live` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
+- [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
+- [x] **Navegação para funcionalidades futuras** — O item "Puzzles" permanece como placeholder visual aguardando as etapas 4.3 e 4.4; "Bots" agora leva à seleção funcional implementada na etapa 4.5.
+- [x] **Polimento de UX/UI da partida** — Sons discretos com preferência local, país ISO com bandeira reutilizável, ação pós-jogo para análise, planilha SAN por full move e microinterações acessíveis na navegação.
+- [x] **Revanche e preferência de layout** — Partidas encerradas permitem revanche com cores invertidas contra humanos ou bots; o tamanho conjunto do tabuleiro e das identidades dos jogadores é configurável e persistido, e o replay aceita navegação pelas setas do teclado.
 
 ---
 

@@ -22,6 +22,7 @@ function validateMove(request) {
       is_stalemate: chess.isStalemate(),
       is_draw: chess.isDraw(),
       captured: move.captured ?? null,
+      san: move.san,
     }
   } catch (_error) {
     return { valid: false, reason: 'illegal_move' }

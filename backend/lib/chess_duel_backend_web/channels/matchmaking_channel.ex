@@ -5,10 +5,15 @@ defmodule ChessDuelBackendWeb.MatchmakingChannel do
 
   @impl true
   def join("matchmaking:" <> user_id, _payload, socket) do
-    if user_id == socket.assigns.user_id do
-      {:ok, assign(socket, :joined_matchmaking, true)}
-    else
-      {:error, %{reason: "unauthorized"}}
+    cond do
+      socket.assigns[:identity_type] != :user ->
+        {:error, %{reason: "registered_users_only"}}
+
+      user_id != socket.assigns.user_id ->
+        {:error, %{reason: "unauthorized"}}
+
+      true ->
+        {:ok, assign(socket, :joined_matchmaking, true)}
     end
   end
 

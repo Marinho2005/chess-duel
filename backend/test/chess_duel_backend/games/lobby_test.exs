@@ -31,7 +31,8 @@ defmodule ChessDuelBackend.Games.LobbyTest do
     assert state.black_player_id == black.id
     assert state.initial_time_ms == 300_000
     assert state.increment_ms == 3_000
-    assert state.white_time_remaining_ms == 300_000
+    assert state.white_time_remaining_ms <= 300_000
+    assert state.white_time_remaining_ms > 299_500
     assert state.black_time_remaining_ms == 300_000
 
     Process.sleep(150)

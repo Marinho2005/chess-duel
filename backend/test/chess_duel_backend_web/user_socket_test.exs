@@ -4,11 +4,15 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   require Phoenix.ChannelTest
 
   alias ChessDuelBackend.Accounts
+  alias ChessDuelBackend.Accounts.Guest
   alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackend.Repo
   alias ChessDuelBackend.Games.GameServer
   alias ChessDuelBackendWeb.GameChannel
+  alias ChessDuelBackendWeb.GamesChannel
+  alias ChessDuelBackendWeb.GuestMatchmakingChannel
   alias ChessDuelBackendWeb.MatchmakingChannel
+  alias ChessDuelBackendWeb.PrivateRoomChannel
   alias ChessDuelBackendWeb.UserSocket
 
   test "aceita token valido e associa o id real do usuario" do
@@ -30,6 +34,46 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   test "recusa token ausente ou invalido" do
     assert :error = Phoenix.ChannelTest.connect(UserSocket, %{})
     assert :error = Phoenix.ChannelTest.connect(UserSocket, %{"token" => "invalid"})
+  end
+
+  test "aceita token temporario e identifica o socket como convidado" do
+    %{token: token, guest: guest} = Guest.new()
+
+    assert {:ok, socket} = Phoenix.ChannelTest.connect(UserSocket, %{"token" => token})
+    assert socket.assigns.identity_type == :guest
+    assert socket.assigns.user_id == guest.id
+    assert UserSocket.id(socket) == "guests_socket:#{guest.id}"
+  end
+
+  test "convidado nao entra no lobby nem no matchmaking por rating" do
+    %{token: token, guest: guest} = Guest.new()
+    {:ok, socket} = Phoenix.ChannelTest.connect(UserSocket, %{"token" => token})
+
+    assert {:error, %{reason: "registered_users_only"}} =
+             Phoenix.ChannelTest.subscribe_and_join(socket, GamesChannel, "games:lobby")
+
+    assert {:error, %{reason: "registered_users_only"}} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               socket,
+               MatchmakingChannel,
+               "matchmaking:#{guest.id}"
+             )
+  end
+
+  test "usuario autenticado nao entra na fila exclusiva de convidados" do
+    user = register_user("guest-queue-block@example.com", "guest_queue_block")
+
+    {:ok, socket} =
+      Phoenix.ChannelTest.connect(UserSocket, %{
+        "token" => Accounts.generate_user_api_token(user)
+      })
+
+    assert {:error, %{reason: "guests_only"}} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               socket,
+               GuestMatchmakingChannel,
+               "guest_matchmaking:#{user.id}"
+             )
   end
 
   test "MatchmakingChannel aceita somente o topico do usuario autenticado" do
@@ -59,6 +103,85 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
 
     ref = Phoenix.ChannelTest.push(channel, "leave_queue", %{})
     Phoenix.ChannelTest.assert_reply(ref, :ok)
+  end
+
+  test "PrivateRoomChannel cria e inicia sala para dois usuarios autenticados" do
+    creator = register_user("private-creator@example.com", "private_creator")
+    opponent = register_user("private-opponent@example.com", "private_opponent")
+    creator_socket = connect_user(creator)
+    opponent_socket = connect_user(opponent)
+
+    assert {:ok, _reply, creator_channel} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               creator_socket,
+               PrivateRoomChannel,
+               "private_rooms:#{creator.id}"
+             )
+
+    assert {:ok, _reply, opponent_channel} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               opponent_socket,
+               PrivateRoomChannel,
+               "private_rooms:#{opponent.id}"
+             )
+
+    ref =
+      Phoenix.ChannelTest.push(creator_channel, "create_room", %{
+        "time_control" => "blitz_5_3"
+      })
+
+    Phoenix.ChannelTest.assert_reply(ref, :ok, %{code: code, time_control: %{id: "blitz_5_3"}})
+
+    ref = Phoenix.ChannelTest.push(opponent_channel, "join_room", %{"code" => code})
+    Phoenix.ChannelTest.assert_reply(ref, :ok, %{state: :matched, game_id: game_id})
+
+    assert {:ok, game} = GameServer.get_state(game_id)
+    assert game.initial_time_ms == 300_000
+    assert game.increment_ms == 3_000
+    Process.sleep(200)
+    {:ok, game_pid} = GameServer.start_or_get(game_id)
+    DynamicSupervisor.terminate_child(ChessDuelBackend.GameSupervisor, game_pid)
+    Process.sleep(50)
+  end
+
+  test "PrivateRoomChannel mantem isolamento entre usuario e convidado" do
+    creator = register_user("private-isolation@example.com", "private_isolation")
+    creator_socket = connect_user(creator)
+
+    assert {:ok, _reply, creator_channel} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               creator_socket,
+               PrivateRoomChannel,
+               "private_rooms:#{creator.id}"
+             )
+
+    ref = Phoenix.ChannelTest.push(creator_channel, "create_room", %{"time_control" => "blitz_3_0"})
+    Phoenix.ChannelTest.assert_reply(ref, :ok, %{code: code})
+
+    %{token: token, guest: guest} = Guest.new()
+    {:ok, guest_socket} = Phoenix.ChannelTest.connect(UserSocket, %{"token" => token})
+
+    assert {:ok, _reply, guest_channel} =
+             Phoenix.ChannelTest.subscribe_and_join(
+               guest_socket,
+               PrivateRoomChannel,
+               "private_rooms:#{guest.id}"
+             )
+
+    ref = Phoenix.ChannelTest.push(guest_channel, "join_room", %{"code" => code})
+    Phoenix.ChannelTest.assert_reply(ref, :error, %{reason: "identity_mismatch"})
+  end
+
+  test "PrivateRoomChannel rejeita topico de outra identidade" do
+    user = register_user("private-topic@example.com", "private_topic")
+
+    assert {:error, %{reason: "unauthorized"}} =
+             user
+             |> connect_user()
+             |> Phoenix.ChannelTest.subscribe_and_join(
+               PrivateRoomChannel,
+               "private_rooms:outra-identidade"
+             )
   end
 
   test "GameChannel usa ids reais e preserva a cor na reconexao" do
@@ -101,6 +224,15 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
       })
 
     confirm_user!(user)
+  end
+
+  defp connect_user(user) do
+    {:ok, socket} =
+      Phoenix.ChannelTest.connect(UserSocket, %{
+        "token" => Accounts.generate_user_api_token(user)
+      })
+
+    socket
   end
 
   defp confirm_user!(user) do

@@ -26,8 +26,12 @@ defmodule ChessDuelBackend.Games.Game do
     field :white_rating_after, :integer
     field :black_rating_before, :integer
     field :black_rating_after, :integer
+    field :bot_id, :string
+    field :bot_color, :string
+    field :preparation_ends_at, :utc_datetime_usec
 
     has_many :rating_changes, ChessDuelBackend.Ratings.RatingChange
+    has_one :analysis, ChessDuelBackend.GameAnalysis.Analysis
 
     timestamps(type: :utc_datetime)
   end
@@ -49,13 +53,20 @@ defmodule ChessDuelBackend.Games.Game do
       :black_time_remaining_ms,
       :initial_time_ms,
       :increment_ms,
-      :finished_at
+      :finished_at,
+      :bot_id,
+      :bot_color,
+      :preparation_ends_at
     ])
     |> validate_required([:game_id, :status, :board_state, :current_turn])
     |> validate_inclusion(:status, ~w(waiting in_progress finished))
     |> validate_inclusion(:current_turn, ~w(white black))
     |> validate_inclusion(:result, ~w(white_wins black_wins draw abandoned))
-    |> validate_inclusion(:end_reason, ~w(checkmate timeout stalemate draw abandonment))
+    |> validate_inclusion(
+      :end_reason,
+      ~w(checkmate timeout stalemate draw abandonment resignation aborted)
+    )
+    |> validate_inclusion(:bot_color, ~w(white black))
     |> validate_number(:initial_time_ms, greater_than: 0)
     |> validate_number(:increment_ms, greater_than_or_equal_to: 0)
     |> unique_constraint(:game_id)

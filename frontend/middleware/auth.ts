@@ -4,7 +4,7 @@ export default defineNuxtRouteMiddleware(async () => {
   const auth = useAuthStore()
   auth.restoreSession()
 
-  if (!auth.token || !(await auth.fetchCurrentUser())) {
+  if (!auth.token || auth.isGuest || !(await auth.fetchCurrentUser())) {
     return navigateTo('/?session=expired')
   }
 })

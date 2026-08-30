@@ -21,6 +21,16 @@ defmodule ChessDuelBackendWeb.UserController do
     end
   end
 
+  def ranking(conn, params) do
+    page = parse_page(params["page"])
+    ranking = Accounts.list_ranked_users(page)
+
+    json(conn, %{
+      players: Enum.map(ranking.users, &UserJSON.ranking_data/1),
+      pagination: Map.drop(ranking, [:users])
+    })
+  end
+
   def update(conn, %{"user" => params}) do
     case Accounts.update_user_profile(conn.assigns.current_user, params) do
       {:ok, user} ->
@@ -67,4 +77,13 @@ defmodule ChessDuelBackendWeb.UserController do
     |> put_status(:unprocessable_entity)
     |> json(%{error: message})
   end
+
+  defp parse_page(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {page, ""} when page > 0 -> page
+      _ -> 1
+    end
+  end
+
+  defp parse_page(_value), do: 1
 end

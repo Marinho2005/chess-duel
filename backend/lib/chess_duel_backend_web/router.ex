@@ -25,10 +25,12 @@ defmodule ChessDuelBackendWeb.Router do
     pipe_through :api
 
     get "/health", HealthController, :index
+    post "/guests/session", GuestSessionController, :create
     post "/users/register", UserRegistrationController, :create
     post "/users/confirm/:token", UserConfirmationController, :create
     post "/users/log_in", UserSessionController, :create
     get "/profiles/:nickname", UserController, :show
+    get "/ranking", UserController, :ranking
   end
 
   scope "/api", ChessDuelBackendWeb do
@@ -37,6 +39,10 @@ defmodule ChessDuelBackendWeb.Router do
     delete "/users/log_out", UserSessionController, :delete
     get "/users/me", UserController, :me
     get "/users/me/games", GameHistoryController, :index
+    get "/bots", BotGameController, :index
+    post "/bot-games", BotGameController, :create
+    post "/games/:id/analyze", GameAnalysisController, :create
+    get "/games/:id/analysis", GameAnalysisController, :show
     patch "/users/me", UserController, :update
     post "/users/me/avatar", UserController, :update_avatar
   end

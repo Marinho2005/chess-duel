@@ -1,5 +1,7 @@
 import Config
 
+config :chess_duel_backend, :game_preparation_ms, 0
+
 # Only in tests, remove the complexity from the password hashing algorithm
 config :bcrypt_elixir, :log_rounds, 1
 
@@ -29,6 +31,11 @@ config :chess_duel_backend, ChessDuelBackendWeb.Endpoint,
 
 # Print only warnings and errors during test
 config :logger, level: :warning
+
+config :chess_duel_backend, Oban,
+  testing: :manual,
+  queues: false,
+  plugins: false
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
