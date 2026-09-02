@@ -170,4 +170,20 @@ async function leave() {
 .room-waiting { display: grid; width: 100%; gap: .7rem; padding: 1rem; background: #efe3cf; border: 1px solid #d9c7ae; border-radius: 12px; }.room-waiting p { display: flex; align-items: center; justify-content: center; gap: .5rem; }.waiting-dot { width: 9px; height: 9px; background: #668a57; border-radius: 50%; box-shadow: 0 0 8px #668a57; animation: pulse 1.2s infinite; }.room-link-row { display: grid; grid-template-columns: 1fr auto; gap: .6rem; }.room-link-row button { color: #7f5130; background: #fffaf0; }
 .leave { color: #7f5130; background: transparent; }.error { color: #a23f30 !important; }
 @media (max-width: 520px) { .guest-card { padding: 1.4rem; }.choices, .room-link-row { grid-template-columns: 1fr; } }
+
+.guest-shell { color:var(--text); background:var(--bg); }
+.guest-card { color:var(--text); background:color-mix(in srgb,var(--surface) 96%,transparent); border-color:var(--border); box-shadow:var(--shadow); }
+.badge { color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,var(--surface-strong)); }
+.piece { color:var(--accent); }
+.guest-card p,.guest-card>small,.room-waiting small,.time-control { color:var(--text-muted); }
+.time-control select,.room-link-row input { color:var(--text); background:var(--surface-strong); border-color:var(--border); }
+.choices button,.room-link-row button,.leave { border-color:var(--border); }
+.primary { color:var(--accent-ink); background:var(--accent); border-color:var(--accent) !important; }
+.primary:hover { background:var(--accent-hover); }
+.secondary,.room-link-row button,.leave { color:var(--text); background:var(--surface-strong); }
+.secondary:hover,.room-link-row button:hover,.leave:hover { color:var(--accent); background:var(--surface-hover); }
+.danger { color:var(--accent-ink); background:var(--danger); border-color:var(--danger) !important; }
+.room-waiting { background:var(--surface-strong); border-color:var(--border); }
+.searching i,.waiting-dot { background:var(--success); box-shadow:0 0 8px color-mix(in srgb,var(--success) 65%,transparent); }
+.error { color:var(--danger) !important; }
 </style>
