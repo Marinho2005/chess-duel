@@ -11,6 +11,8 @@ defmodule ChessDuelBackend.Accounts.User do
     field :country_code, :string
     field :avatar_path, :string
     field :rating, :integer, default: 1200
+    field :puzzle_rating, :integer, default: 1200
+    field :battle_rating, :integer, default: 1200
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :confirmed_at, :naive_datetime
@@ -64,6 +66,14 @@ defmodule ChessDuelBackend.Accounts.User do
   @doc false
   def rating_changeset(user, rating) when is_integer(rating) do
     change(user, rating: rating)
+  end
+
+  def puzzle_rating_changeset(user, rating) when is_integer(rating) do
+    change(user, puzzle_rating: rating)
+  end
+
+  def battle_rating_changeset(user, rating) when is_integer(rating) do
+    change(user, battle_rating: rating)
   end
 
   @doc """
