@@ -16,9 +16,14 @@ defmodule ChessDuelBackend.Application do
         ChessDuelBackend.Games.PrivateRooms,
         {Registry, keys: :unique, name: ChessDuelBackend.GameRegistry},
         {DynamicSupervisor, name: ChessDuelBackend.GameSupervisor, strategy: :one_for_one},
+        {Registry, keys: :unique, name: ChessDuelBackend.PuzzleRushRegistry},
+        {DynamicSupervisor, name: ChessDuelBackend.PuzzleRushSupervisor, strategy: :one_for_one},
+        {Registry, keys: :unique, name: ChessDuelBackend.PuzzleBattleRegistry},
+        {DynamicSupervisor, name: ChessDuelBackend.PuzzleBattleSupervisor, strategy: :one_for_one},
         ChessDuelBackend.Games.Rematches,
         redix_child_spec(),
         ChessDuelBackend.Games.Matchmaker,
+        ChessDuelBackend.Puzzles.BattleMatchmaker,
         ChessDuelBackendWeb.Endpoint
       ]
 

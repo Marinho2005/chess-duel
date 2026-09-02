@@ -43,6 +43,12 @@ defmodule ChessDuelBackendWeb.Router do
     post "/bot-games", BotGameController, :create
     post "/games/:id/analyze", GameAnalysisController, :create
     get "/games/:id/analysis", GameAnalysisController, :show
+    get "/puzzles/next", PuzzleController, :next
+    get "/puzzles/summary", PuzzleController, :summary
+    post "/puzzles/:id/attempt", PuzzleController, :attempt
+    post "/puzzle_rush/start", PuzzleRushController, :start
+    get "/puzzle_rush/:session_id", PuzzleRushController, :show
+    post "/puzzle_rush/:session_id/attempt", PuzzleRushController, :attempt
     patch "/users/me", UserController, :update
     post "/users/me/avatar", UserController, :update_avatar
   end
