@@ -46,8 +46,10 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
 
       puzzle ->
         duration_ms = opts[:duration_seconds] * 1_000
-        started_at = DateTime.utc_now(:millisecond)
-        timer = Process.send_after(self(), :expire, duration_ms)
+        preparation_ms = Application.get_env(:chess_duel_backend, :puzzle_rush_countdown_ms, 3_000)
+        created_at = DateTime.utc_now(:millisecond)
+        started_at = DateTime.add(created_at, preparation_ms, :millisecond)
+        timer = Process.send_after(self(), :expire, duration_ms + preparation_ms)
 
         {:ok,
          %{
@@ -56,7 +58,8 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
            duration_seconds: opts[:duration_seconds],
            started_at: started_at,
            ends_at: DateTime.add(started_at, duration_ms, :millisecond),
-           deadline_ms: System.monotonic_time(:millisecond) + duration_ms,
+           starts_at_ms: System.monotonic_time(:millisecond) + preparation_ms,
+           deadline_ms: System.monotonic_time(:millisecond) + preparation_ms + duration_ms,
            timer: timer,
            puzzle: puzzle,
            expected_index: 1,
@@ -85,6 +88,9 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
 
       state.finished_at ->
         {:reply, {:ok, result_payload(state)}, state}
+
+      System.monotonic_time(:millisecond) < state.starts_at_ms ->
+        {:reply, {:error, :not_started}, state}
 
       remaining_ms(state) <= 0 ->
         reply_finished(state)
@@ -224,6 +230,7 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
       started_at: state.started_at,
       ends_at: state.ends_at,
       server_now: DateTime.utc_now(:millisecond),
+      preparation_remaining_ms: preparation_remaining_ms(state),
       remaining_ms: remaining_ms(state),
       score: state.score,
       errors: state.errors,
@@ -235,7 +242,13 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
     Puzzles.select_puzzle(target, excluded_ids)
   end
 
-  defp remaining_ms(state), do: max(state.deadline_ms - System.monotonic_time(:millisecond), 0)
+  defp preparation_remaining_ms(state),
+    do: max(state.starts_at_ms - System.monotonic_time(:millisecond), 0)
+
+  defp remaining_ms(state) do
+    duration_ms = state.duration_seconds * 1_000
+    min(max(state.deadline_ms - System.monotonic_time(:millisecond), 0), duration_ms)
+  end
 
   defp call_session(session_id, message) do
     case Registry.lookup(ChessDuelBackend.PuzzleRushRegistry, session_id) do

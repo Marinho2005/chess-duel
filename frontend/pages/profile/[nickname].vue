@@ -97,4 +97,14 @@ function memberSince(date: string) {
 .status { text-align: center; }.piece { color: #6f4528; font-size: 3rem; }.status h1 { font-family: Georgia, serif; }
 .history-link { display: inline-block; margin-top: 1.5rem; padding: .85rem 1.1rem; color: white; font-weight: 700; text-decoration: none; background: #6f4528; border-radius: 10px; }
 @media (max-width: 560px) { .identity { align-items: flex-start; }.avatar { width: 64px; height: 64px; }.stats { grid-template-columns: 1fr; } }
+
+.profile-shell { color:var(--text); background:var(--bg); }
+.back,.eyebrow,.piece { color:var(--accent); }
+.card { color:var(--text); background:color-mix(in srgb,var(--surface) 96%,transparent); border-color:var(--border); box-shadow:var(--shadow); }
+.avatar { color:var(--accent-ink); background:var(--accent); }
+.identity p,.member,.stats span { color:var(--text-muted); }
+.stats article { background:var(--surface-strong); border-color:var(--border); }
+.stats strong { color:var(--accent); }
+.history-link { color:var(--accent-ink); background:var(--accent); }
+.history-link:hover { background:var(--accent-hover); }
 </style>

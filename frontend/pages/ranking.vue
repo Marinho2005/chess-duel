@@ -81,4 +81,5 @@ header span { display: block; margin-top: .65rem; color: #806d5d; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.2rem; color: #806d5d; font-size: .88rem; }
 button { padding: .7rem 1rem; color: #3c2b20; background: #f7eedf; border: 1px solid #dfcfb8; border-radius: 9px; cursor: pointer; }button:disabled { opacity: .5; cursor: default; }
 @media (max-width: 760px) { .content { padding: 1rem; }.pagination { justify-content: space-between; gap: .5rem; } }
+.page-shell { color: var(--text); background: var(--bg); }.content { width: min(1120px, 100%); margin: auto; }header, .panel { background: var(--surface); border-color: var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow); }header p, .summary strong { color: var(--accent); }h1 { font-family: inherit; font-weight: 700; letter-spacing: -.035em; }header span, .summary, .state, .pagination { color: var(--text-muted); }.state { border-color: var(--border); }.state.error { color: var(--danger); background: var(--danger-soft); }button { color: var(--text); background: var(--surface-strong); border-color: var(--border); }
 </style>

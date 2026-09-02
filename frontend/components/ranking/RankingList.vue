@@ -47,4 +47,5 @@ a:hover { color: #6f4528; text-decoration: underline; }
 strong { color: #6f4528; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 small { color: #8b7664; font-size: .72rem; font-weight: 500; }
 @media (max-width: 520px) { .ranking-row { grid-template-columns: 40px 40px minmax(0, 1fr) auto; gap: .65rem; padding-inline: .7rem; }.avatar { width: 40px; height: 40px; }.position svg { display: none; } }
+.ranking-row { background: var(--surface-strong); border-color: var(--border); }.position { color: var(--text-muted); }.position.podium, strong { color: var(--accent); }.fallback { color: var(--accent-ink); background: var(--accent); }a { color: var(--text); }a:hover { color: var(--accent); }small { color: var(--text-muted); }
 </style>

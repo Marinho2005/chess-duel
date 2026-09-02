@@ -19,6 +19,6 @@ body,
 }
 
 body {
-  background: #f4eddf;
+  background: var(--bg);
 }
 </style>

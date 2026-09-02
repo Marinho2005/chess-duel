@@ -51,6 +51,9 @@ defmodule ChessDuelBackendWeb.PuzzleRushController do
       {:error, :forbidden} ->
         conn |> put_status(:forbidden) |> json(%{error: "forbidden"})
 
+      {:error, :not_started} ->
+        conn |> put_status(:conflict) |> json(%{error: "not_started"})
+
       {:error, {:unexpected_index, expected}} ->
         conn
         |> put_status(:conflict)

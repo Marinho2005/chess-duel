@@ -127,9 +127,10 @@ develop estável -> Pull Request -> main
 
 - [x] **4.1 Worker Stockfish separado** — Processo UCI isolado do game service, executado por uma fila Oban dedicada para não competir por recursos com partidas ao vivo.
 - [x] **4.2 Análise pós-jogo assíncrona** — Stockfish analisa partidas finalizadas em background; participantes acompanham o processamento e revisam a partida em uma tela interativa com replay, classificações e barra de avaliação.
-- [ ] **4.3 Banco de puzzles táticos** — Curadoria/geração de puzzles a partir de partidas reais.
-- [ ] **4.4 Puzzle Rush** — Modo de puzzles cronometrados, estilo chess.com.
+- [x] **4.3 Banco de puzzles táticos** — Importação streaming de um subconjunto distribuído do dataset CC0 do Lichess, seleção por rating, tentativas persistidas e interface interativa com Chessground. O FEN antecede a sequência: o lance de índice 0 é preparação automática, o usuário joga os índices ímpares e as respostas pares são automáticas. O `puzzle_rating` começa em 1200 e é independente do rating de partidas.
+- [x] **4.4 Puzzle Rush** — Sessões autoritativas cronometradas em GenServers próprios, sequência crescente por dificuldade, limite de três erros, placares separados e interface com modos de 3 e 5 minutos.
 - [x] **4.5 Partidas contra bots** — Stockfish com cinco níveis de força, integrado ao `GameServer`, com personagens ilustrados, preparação autoritativa, abortar, desistir e partidas sem alteração de rating.
+- [x] **4.6 Puzzle Battle** — Matchmaking separado por duração e proximidade de `battle_rating`, duelos autoritativos em Phoenix Channels com a mesma sequência para ambos, progresso independente, reconexão, desempate determinístico e rating Elo próprio.
 
 ### Fase 5 — Monetização (SaaS)
 
@@ -149,7 +150,7 @@ develop estável -> Pull Request -> main
 - [x] **UI real de jogo** — Rota `/game/:gameId/live` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 - [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
-- [x] **Navegação para funcionalidades futuras** — O item "Puzzles" permanece como placeholder visual aguardando as etapas 4.3 e 4.4; "Bots" agora leva à seleção funcional implementada na etapa 4.5.
+- [x] **Navegação das funcionalidades** — Os itens "Puzzles" e "Bots" levam às interfaces funcionais implementadas nas etapas 4.3–4.6; o hub de puzzles separa Classic, Rush e Battle.
 - [x] **Polimento de UX/UI da partida** — Sons discretos com preferência local, país ISO com bandeira reutilizável, ação pós-jogo para análise, planilha SAN por full move e microinterações acessíveis na navegação.
 - [x] **Revanche e preferência de layout** — Partidas encerradas permitem revanche com cores invertidas contra humanos ou bots; o tamanho conjunto do tabuleiro e das identidades dos jogadores é configurável e persistido, e o replay aceita navegação pelas setas do teclado.
 
