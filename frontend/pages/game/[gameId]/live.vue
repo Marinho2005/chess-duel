@@ -512,11 +512,8 @@ function gameOverReason(reason: GameOver['reason']) {
 </script>
 
 <template>
-  <main class="game-shell" :class="`layout-${boardLayoutSize}`" @pointerdown.once="sounds.unlock">
-    <header class="game-header">
-      <span v-if="auth.isGuest" class="brand"><span>♟</span> ChessDuel</span>
-      <NuxtLink v-else to="/lobby" class="brand"><span>♟</span> ChessDuel</NuxtLink>
-      <div class="connection"><i />{{ connectionStatus }}</div>
+  <NavigationAppHeader>
+    <template #context-actions>
       <div class="header-actions">
         <fieldset class="layout-size" aria-label="Tamanho do tabuleiro">
           <legend>Tabuleiro</legend>
@@ -527,8 +524,9 @@ function gameOverReason(reason: GameOver['reason']) {
         </button>
         <button type="button" class="leave" @click="leaveGame">← {{ auth.isGuest ? 'Sair da sessão' : 'Voltar ao salão' }}</button>
       </div>
-    </header>
-
+    </template>
+  </NavigationAppHeader>
+  <main class="game-shell" :class="`layout-${boardLayoutSize}`" @pointerdown.once="sounds.unlock">
     <div class="game-layout">
       <section class="board-column">
         <article class="player-bar" :class="{ thinking: currentTurn === topColor && gameStatus !== 'finished' }">
@@ -549,6 +547,33 @@ function gameOverReason(reason: GameOver['reason']) {
             :disabled="boardDisabled"
             @move="sendBoardMove"
           />
+          <div v-if="gameOverMessage" class="result-overlay" role="dialog" aria-modal="true" aria-labelledby="game-result-title">
+            <div class="result-card">
+              <span>RESULTADO DA PARTIDA</span>
+              <strong id="game-result-title">{{ gameOverMessage }}</strong>
+              <p v-if="ratingMessage">Novo rating: {{ ratingMessage }}</p>
+              <p v-if="guestGame">Crie uma conta para salvar seu histórico e disputar rating nas próximas partidas.</p>
+              <button v-if="postGameAnalysisAction === 'button'" type="button" :disabled="openingAnalysis" @click="openAnalysis">{{ openingAnalysis ? 'Abrindo análise…' : 'Analisar partida' }}</button>
+              <span v-else-if="postGameAnalysisAction === 'processing'" class="analysis-progress">{{ analysisStatus === 'checking' ? 'Consultando análise…' : 'Análise em processamento…' }}</span>
+
+              <div class="rematch-card">
+                <template v-if="botGame && rematchState === 'bot_offer'">
+                  <span class="rematch-dialogue">{{ botPlayer?.nickname || 'O bot' }} inclina uma peça e pergunta: “Outra partida?”</span>
+                  <div><button type="button" @click="acceptRematch">Aceitar revanche</button><button type="button" class="quiet" @click="declineRematch">Agora não</button></div>
+                </template>
+                <template v-else-if="!botGame && rematchState === 'idle'">
+                  <button type="button" @click="requestRematch">Pedir revanche</button>
+                </template>
+                <template v-else-if="rematchState === 'incoming'">
+                  <span class="rematch-dialogue">Seu oponente quer jogar novamente.</span>
+                  <div><button type="button" @click="acceptRematch">Aceitar revanche</button><button type="button" class="quiet" @click="declineRematch">Recusar</button></div>
+                </template>
+                <span v-else-if="rematchState === 'waiting'" class="rematch-dialogue">Pedido de revanche enviado. Aguardando resposta…</span>
+                <span v-else-if="rematchState === 'starting'" class="rematch-dialogue">Preparando a revanche…</span>
+                <span v-else-if="rematchState === 'declined'" class="rematch-dialogue">Revanche recusada.</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <article class="player-bar" :class="{ thinking: currentTurn === bottomColor && gameStatus !== 'finished' }">
@@ -582,33 +607,7 @@ function gameOverReason(reason: GameOver['reason']) {
           <p v-else class="empty">O primeiro lance será registrado aqui.</p>
         </section>
 
-        <div v-if="gameOverMessage" class="result-card">
-          <span>RESULTADO</span>
-          <strong>{{ gameOverMessage }}</strong>
-          <p v-if="ratingMessage">Novo rating: {{ ratingMessage }}</p>
-          <p v-if="guestGame">Crie uma conta para salvar seu histórico e disputar rating nas próximas partidas.</p>
-          <button v-if="postGameAnalysisAction === 'button'" type="button" :disabled="openingAnalysis" @click="openAnalysis">{{ openingAnalysis ? 'Abrindo análise…' : 'Analisar partida' }}</button>
-          <span v-else-if="postGameAnalysisAction === 'processing'" class="analysis-progress">{{ analysisStatus === 'checking' ? 'Consultando análise…' : 'Análise em processamento…' }}</span>
-
-          <div class="rematch-card">
-            <template v-if="botGame && rematchState === 'bot_offer'">
-              <span class="rematch-dialogue">{{ botPlayer?.nickname || 'O bot' }} inclina uma peça e pergunta: “Outra partida?”</span>
-              <div><button type="button" @click="acceptRematch">Aceitar revanche</button><button type="button" class="quiet" @click="declineRematch">Agora não</button></div>
-            </template>
-            <template v-else-if="!botGame && rematchState === 'idle'">
-              <button type="button" @click="requestRematch">Pedir revanche</button>
-            </template>
-            <template v-else-if="rematchState === 'incoming'">
-              <span class="rematch-dialogue">Seu oponente quer jogar novamente.</span>
-              <div><button type="button" @click="acceptRematch">Aceitar revanche</button><button type="button" class="quiet" @click="declineRematch">Recusar</button></div>
-            </template>
-            <span v-else-if="rematchState === 'waiting'" class="rematch-dialogue">Pedido de revanche enviado. Aguardando resposta…</span>
-            <span v-else-if="rematchState === 'starting'" class="rematch-dialogue">Preparando a revanche…</span>
-            <span v-else-if="rematchState === 'declined'" class="rematch-dialogue">Revanche recusada.</span>
-          </div>
-        </div>
-
-        <div v-else-if="gameStatus === 'in_progress'" class="game-actions" aria-live="polite">
+        <div v-if="gameStatus === 'in_progress'" class="game-actions" aria-live="polite">
           <template v-if="confirmingResignation">
             <span>Confirmar desistência?</span>
             <button type="button" class="cancel-resign" @click="confirmingResignation = false">Cancelar</button>
@@ -630,15 +629,50 @@ function gameOverReason(reason: GameOver['reason']) {
 </template>
 
 <style scoped>
-.game-shell { --cream: #f4eddf; --panel: #fffaf0; --line: #ddcdb5; --ink: #38281e; --brown: #6f4528; --board-limit: 720px; --avatar-size: 44px; --bot-emote-scale: .9565; min-height: 100vh; padding: .65rem clamp(1rem, 3vw, 2.5rem) 1.5rem; color: var(--ink); background-color: var(--cream); background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }.game-shell.layout-compact { --board-limit: 560px; --avatar-size: 38px; --bot-emote-scale: .8261; }.game-shell.layout-large { --board-limit: 820px; --avatar-size: 50px; --bot-emote-scale: 1.087; }
-.game-header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; max-width: 1360px; min-height: 38px; margin: 0 auto .7rem; }.brand { color: var(--brown); font: 700 1.45rem Georgia, serif; text-decoration: none; }.brand span { font-size: 1rem; }.header-actions { display: flex; justify-self: end; align-items: center; gap: .5rem; }.leave,.sound-toggle { padding: 0; color: #4b3829; background: transparent; border: 0; font: inherit; cursor: pointer; }.leave:hover { color: var(--brown); text-decoration: underline; }.sound-toggle { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .45rem; border: 1px solid #ddcdb5; border-radius: 8px; transition: background 150ms ease, color 150ms ease, border-color 150ms ease; }.sound-toggle span { font-size: .72rem; }.sound-toggle:hover { color: var(--brown); background: #efe2ce; border-color: #c7ab82; }.layout-size { display: flex; align-items: center; gap: .12rem; margin: 0; padding: .14rem; border: 1px solid #ddcdb5; border-radius: 8px; }.layout-size legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }.layout-size button { display: grid; width: 25px; height: 25px; place-items: center; padding: 0; color: #806d5d; background: transparent; border: 0; border-radius: 6px; font: 800 .66rem Inter,sans-serif; cursor: pointer; }.layout-size button:hover,.layout-size button.active { color: white; background: #6f4528; }.connection { display: flex; align-items: center; gap: 0.4rem; color: #6d7f5e; font-size: 0.78rem; }.connection i { width: 6px; height: 6px; background: #6c8d5c; border-radius: 50%; box-shadow: 0 0 7px #6c8d5c; }
-.game-layout { display: grid; grid-template-columns: minmax(420px, var(--board-limit)) minmax(290px, 360px); justify-content: center; align-items: start; gap: clamp(1.2rem, 3vw, 2.5rem); max-width: 1360px; margin: auto; }.board-column { display: grid; width: min(100%, var(--board-limit)); gap: 0.7rem; min-width: 0; justify-self: end; }.board-frame { width: min(100%, calc(100dvh - 280px)); justify-self: center; }.layout-compact .board-column { width: min(100%, 530px); gap: .35rem; }.layout-compact .board-frame { width: min(100%, 510px); }.layout-compact .player-bar { min-height: calc(var(--avatar-size) + 16px); padding: .45rem .7rem; }.player-bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.8rem; min-height: calc(var(--avatar-size) + 22px); padding: 0.65rem 0.85rem; background: #fffaf0c9; border: 1px solid transparent; border-radius: 13px; transition: border-color 160ms, box-shadow 160ms; }.player-bar.thinking { border-color: #b98a62; box-shadow: 0 5px 18px #6d47231b; }.player-bar img, .avatar { display: grid; width: var(--avatar-size); height: var(--avatar-size); place-items: center; object-fit: cover; color: white; background: var(--brown); border-radius: 50%; font-weight: 800; }.player-bar div { display: grid; }.player-bar small { color: #887261; }.player-bar time { min-width: 112px; padding: 0.45rem 0.7rem; text-align: center; background: #eadcc7; border-radius: 9px; font: 700 clamp(1.45rem, 3vw, 2.1rem)/1 ui-monospace, monospace; }
+.game-shell { --cream: #f4eddf; --panel: #fffaf0; --line: #ddcdb5; --ink: #38281e; --brown: #6f4528; --board-limit: 720px; --avatar-size: 44px; --bot-emote-scale: .9565; min-height: calc(100vh - 60px); padding: 0 clamp(1rem, 3vw, 2.5rem) 1.5rem; color: var(--ink); background-color: var(--cream); background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }.game-shell.layout-compact { --board-limit: 560px; --avatar-size: 38px; --bot-emote-scale: .8261; }.game-shell.layout-large { --board-limit: 820px; --avatar-size: 50px; --bot-emote-scale: 1.087; }
+.header-actions { display: flex; align-items: center; gap: .5rem; margin-left: auto; }.leave,.sound-toggle { padding: 0; color: var(--text); background: transparent; border: 0; font: inherit; cursor: pointer; }.leave:hover { color: var(--accent); text-decoration: underline; }.sound-toggle { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .45rem; border: 1px solid var(--border); border-radius: 8px; transition: background 150ms ease, color 150ms ease, border-color 150ms ease; }.sound-toggle span { font-size: .72rem; }.sound-toggle:hover { color: var(--accent); background: var(--surface-hover); border-color: var(--accent); }.layout-size { display: flex; align-items: center; gap: .12rem; margin: 0; padding: .14rem; border: 1px solid var(--border); border-radius: 8px; }.layout-size legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }.layout-size button { display: grid; width: 25px; height: 25px; place-items: center; padding: 0; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px; font: 800 .66rem Inter,sans-serif; cursor: pointer; }.layout-size button:hover,.layout-size button.active { color: var(--accent-ink); background: var(--accent); }
+.game-layout { display: grid; grid-template-columns: minmax(420px, var(--board-limit)) minmax(290px, 360px); justify-content: center; align-items: start; gap: clamp(1.2rem, 3vw, 2.5rem); max-width: 1360px; margin: auto; }.board-column { display: grid; width: min(100%, var(--board-limit)); gap: 0.7rem; min-width: 0; justify-self: end; }.board-frame { position:relative; width: min(100%, calc(100dvh - 280px)); justify-self: center; }.layout-compact .board-column { width: min(100%, 530px); gap: .35rem; }.layout-compact .board-frame { width: min(100%, 510px); }.layout-compact .player-bar { min-height: calc(var(--avatar-size) + 16px); padding: .45rem .7rem; }.player-bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.8rem; min-height: calc(var(--avatar-size) + 22px); padding: 0.65rem 0.85rem; background: #fffaf0c9; border: 1px solid transparent; border-radius: 13px; transition: border-color 160ms, box-shadow 160ms; }.player-bar.thinking { border-color: #b98a62; box-shadow: 0 5px 18px #6d47231b; }.player-bar img, .avatar { display: grid; width: var(--avatar-size); height: var(--avatar-size); place-items: center; object-fit: cover; color: white; background: var(--brown); border-radius: 50%; font-weight: 800; }.player-bar div { display: grid; }.player-bar small { color: #887261; }.player-bar time { min-width: 112px; padding: 0.45rem 0.7rem; text-align: center; background: #eadcc7; border-radius: 9px; font: 700 clamp(1.45rem, 3vw, 2.1rem)/1 ui-monospace, monospace; }
 .player-bar em { display: inline-block; margin-left: .35rem; padding: .15rem .4rem; color: #7f5130; background: #ead7bc; border-radius: 999px; font-size: .62rem; font-style: normal; text-transform: uppercase; letter-spacing: .06em; }
 .player-bar em.bot-tag { color: #fffaf0; background: #6f4528; }
-.match-panel { display: flex; min-height: min(760px, calc(100vh - 85px)); flex-direction: column; overflow: hidden; background: #fffaf0e8; border: 1px solid #e4d5bf; border-radius: 18px; box-shadow: 0 18px 40px #6f452818; }.panel-heading { padding: 1.5rem; border-bottom: 1px solid var(--line); }.panel-heading > span, .result-card > span { color: var(--brown); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.11em; }.panel-heading h1 { margin: 0.35rem 0; font: 500 1.65rem Georgia, serif; }.panel-heading p { margin: 0; color: #867160; font-size: 0.86rem; }.result-card { display: grid; gap: 0.65rem; margin: 1rem; padding: 1rem; color: #f8f3e8; background: #7f5130; border-radius: 12px; }.result-card strong { font: 500 1.15rem Georgia, serif; }.result-card p { margin: 0; color: #e9d9c7; }.result-card button { margin-top: .25rem; padding: .7rem .85rem; color: #6f4528; background: #fff8ed; border: 0; border-radius: 8px; font-weight: 800; cursor: pointer; }.result-card button:disabled { opacity: .65; cursor: wait; }.analysis-progress { color: #f0dfcc; font-size: .8rem; }.error { margin: 1rem; padding: 0.8rem; color: #9c3f2f; background: #f6ded5; border-radius: 10px; }
-.rematch-card { display: grid; gap: .55rem; margin-top: .25rem; padding-top: .8rem; border-top: 1px solid #fff4df33; }.rematch-card > div { display: grid; grid-template-columns: 1fr auto; gap: .45rem; }.rematch-dialogue { color: #f3e5d4; font-size: .82rem; line-height: 1.45; }.result-card .rematch-card button { margin: 0; }.result-card .rematch-card button.quiet { color: #f4e8d8; background: transparent; border: 1px solid #ead6bc66; }
+.match-panel { display: flex; min-height: min(760px, calc(100vh - 85px)); flex-direction: column; overflow: hidden; background: #fffaf0e8; border: 1px solid #e4d5bf; border-radius: 18px; box-shadow: 0 18px 40px #6f452818; }.panel-heading { padding: 1.5rem; border-bottom: 1px solid var(--line); }.panel-heading > span { color: var(--brown); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.11em; }.panel-heading h1 { margin: 0.35rem 0; font: 500 1.65rem Georgia, serif; }.panel-heading p { margin: 0; color: #867160; font-size: 0.86rem; }.result-overlay { position:absolute; z-index:10; inset:0; display:grid; place-items:center; padding:clamp(.8rem,3vw,1.5rem); background:#38281e94; border-radius:7px; backdrop-filter:blur(2px); }.result-card { display:grid; width:min(100%,430px); gap:.75rem; padding:clamp(1.15rem,3vw,1.65rem); color:var(--ink); background:#fffaf0f5; border:1px solid #d8c3a6; border-radius:18px; box-shadow:0 24px 60px #2c1b1166; }.result-card>span:first-child { color:var(--brown); font-size:.65rem; font-weight:900; letter-spacing:.13em; }.result-card>strong { font:600 clamp(1.25rem,3vw,1.65rem)/1.25 Georgia,serif; }.result-card>p { margin:0; color:#806d5d; font-size:.85rem; line-height:1.45; }.result-card>button,.rematch-card button { min-height:44px; padding:.7rem .9rem; color:#fffaf0; background:var(--brown); border:1px solid var(--brown); border-radius:10px; font-weight:800; cursor:pointer; transition:transform 150ms ease,background 150ms ease; }.result-card>button:hover,.rematch-card button:hover { background:#805437; transform:translateY(-1px); }.result-card button:disabled { opacity:.65; cursor:wait; }.analysis-progress { padding:.7rem; color:#6f4528; background:#f0e2ce; border-radius:9px; font-size:.8rem; text-align:center; }
+.rematch-card { display:grid; gap:.7rem; margin-top:.15rem; padding-top:.9rem; border-top:1px solid #dfcfb8; }.rematch-card>div { display:grid; grid-template-columns:1fr auto; gap:.55rem; }.rematch-dialogue { color:#5f4838; font-size:.86rem; line-height:1.5; }.result-card .rematch-card button { margin:0; }.result-card .rematch-card button.quiet { color:#6f4528; background:transparent; border-color:#caaa82; }.result-card .rematch-card button.quiet:hover { background:#f0e2ce; }
 .preparation-card { display: grid; justify-items: center; gap: .55rem; margin: 1rem; padding: 1.1rem; text-align: center; background: #f2e5d2; border: 1px solid #d8c3a6; border-radius: 13px; }.preparation-card > span { color: #6f4528; font-size: .68rem; font-weight: 800; letter-spacing: .12em; }.preparation-card strong { display: grid; width: 58px; height: 58px; place-items: center; color: white; background: #6f4528; border-radius: 50%; font: 700 1.7rem ui-monospace, monospace; }.preparation-card p { margin: 0; color: #806d5d; font-size: .82rem; line-height: 1.45; }.preparation-card button, .game-actions button { padding: .58rem .8rem; color: #fffaf0; background: #7f5130; border: 1px solid #7f5130; border-radius: 8px; font-weight: 700; cursor: pointer; transition: background 150ms ease, border-color 150ms ease, transform 150ms ease; }.preparation-card button:hover, .game-actions button:hover { background: #6f4528; border-color: #6f4528; transform: translateY(-1px); }.game-actions { display: flex; min-height: 50px; align-items: center; justify-content: flex-end; gap: .4rem; padding: .55rem 1.2rem 0; }.game-actions > span { margin-right: auto; color: #806d5d; font-size: .76rem; }.game-actions .cancel-resign { color: #7f5130; background: transparent; border-color: #d8c7af; }.game-actions .cancel-resign:hover { color: #6f4528; background: #efe2ce; }.game-actions .confirm-resign { color: #fffaf0; background: #8e3f32; border-color: #8e3f32; }
 .moves-panel { display: flex; min-height: 0; flex: 1; flex-direction: column; padding: 1.2rem 1.5rem; }.moves-title { display: flex; align-items: center; justify-content: space-between; }.moves-title h2 { margin: 0; font: 500 1.25rem Georgia, serif; }.moves-title > div { display: flex; align-items: center; gap: .4rem; }.moves-title button { padding: .3rem .5rem; color: #6f4528; background: #fffaf0; border: 1px solid #d8c4aa; border-radius: 7px; font-size: .68rem; font-weight: 800; cursor: pointer; }.moves-title span { display: grid; min-width: 38px; height: 27px; padding: 0 .35rem; place-items: center; color: #79543b; background: #eadcc7; border-radius: 999px; font-size: 0.7rem; }.moves-panel ol { display: grid; align-content: start; gap: 0.25rem; max-height: 410px; margin: 1rem 0 0; padding: 0; overflow-y: auto; list-style: none; }.moves-panel li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 0.6rem; padding: 0.55rem 0.45rem; border-bottom: 1px solid #eadfce; }.moves-panel li > span, .moves-panel small, .empty { color: #8c7867; font-size: 0.78rem; }.moves-panel strong { font-family: ui-monospace, monospace; }.empty { margin: auto; text-align: center; }.match-panel footer { display: grid; gap: 0.2rem; padding: 1rem 1.5rem; color: #6f855c; background: #eee2d0; border-top: 1px solid var(--line); }.match-panel footer small { color: #8a7766; }
-@media (max-width: 900px) { .game-header { grid-template-columns: 1fr auto; }.connection { display: none; }.game-layout { grid-template-columns: minmax(0, 680px); }.board-frame { width: 100%; }.match-panel { min-height: 0; }.moves-panel ol { max-height: 260px; } }
-@media (max-width: 560px) { .game-shell { padding: 0.7rem 0.55rem 1rem; }.game-header { margin: 0 0.35rem 0.7rem; }.brand { font-size: 1.25rem; }.leave { font-size: 0.78rem; }.player-bar { min-height: 55px; padding: 0.45rem 0.55rem; }.player-bar img, .avatar { width: 38px; height: 38px; }.player-bar time { min-width: 88px; font-size: 1.35rem; }.board-frame { border-radius: 5px; }.match-panel { border-radius: 13px; }.panel-heading { padding: 1.1rem; } }
+@media (max-width: 1100px) { .header-actions .leave { display:none; } }
+@media (max-width: 900px) { .game-layout { grid-template-columns: minmax(0, 680px); }.board-frame { width: 100%; }.match-panel { min-height: 0; }.moves-panel ol { max-height: 260px; } }
+@media (max-width: 820px) { .header-actions { margin-left:0; }.header-actions .sound-toggle span { display:none; } }
+@media (max-width: 560px) { .game-shell { min-height:calc(100vh - 58px); padding: 0 .55rem 1rem; }.leave { font-size: 0.78rem; }.player-bar { min-height: 55px; padding: 0.45rem 0.55rem; }.player-bar img, .avatar { width: 38px; height: 38px; }.player-bar time { min-width: 88px; font-size: 1.35rem; }.board-frame { border-radius: 5px; }.match-panel { border-radius: 13px; }.panel-heading { padding: 1.1rem; } }
+
+/* Superfícies da partida acompanham o tema; o tabuleiro mantém sua paleta própria. */
+.game-shell { --ink:var(--text); --brown:var(--accent); --line:var(--border); color:var(--text); }
+.player-bar { background:color-mix(in srgb,var(--surface) 94%,transparent); border-color:var(--border-subtle); }
+.player-bar.thinking { border-color:var(--accent); box-shadow:0 5px 18px color-mix(in srgb,var(--accent) 14%,transparent); }
+.player-bar small { color:var(--text-muted); }
+.player-bar time { color:var(--text); background:var(--surface-strong); }
+.player-bar em { color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,var(--surface-strong)); }
+.player-bar em.bot-tag { color:var(--accent-ink); background:var(--accent); }
+.avatar { color:var(--accent-ink); background:var(--accent); }
+.match-panel { color:var(--text); background:color-mix(in srgb,var(--surface) 96%,transparent); border-color:var(--border); box-shadow:var(--shadow); }
+.panel-heading { border-color:var(--border); }
+.panel-heading > span,.panel-heading p { color:var(--text-muted); }
+.panel-heading > span { color:var(--accent); }
+.preparation-card { background:var(--surface-strong); border-color:var(--border); }
+.preparation-card > span { color:var(--accent); }
+.preparation-card strong,.preparation-card button,.game-actions button { color:var(--accent-ink); background:var(--accent); border-color:var(--accent); }
+.preparation-card p,.game-actions > span,.empty { color:var(--text-muted); }
+.preparation-card button:hover,.game-actions button:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+.game-actions .cancel-resign { color:var(--text); background:transparent; border-color:var(--border); }
+.game-actions .cancel-resign:hover { color:var(--accent); background:var(--surface-hover); }
+.moves-title button { color:var(--accent); background:var(--surface-strong); border-color:var(--border); }
+.moves-title span { color:var(--text-muted); background:var(--surface-strong); }
+.match-panel footer { color:var(--success); background:var(--surface-strong); border-color:var(--border); }
+.match-panel footer small { color:var(--text-muted); }
+.result-card { color:var(--text); background:color-mix(in srgb,var(--surface) 97%,transparent); border-color:var(--border); box-shadow:var(--shadow); }
+.result-card>span:first-child { color:var(--accent); }
+.result-card>p,.rematch-dialogue { color:var(--text-muted); }
+.result-card>button,.rematch-card button { color:var(--accent-ink); background:var(--accent); border-color:var(--accent); }
+.result-card>button:hover,.rematch-card button:hover { background:var(--accent-hover); }
+.rematch-card { border-color:var(--border); }
+.result-card .rematch-card button.quiet { color:var(--text); background:transparent; border-color:var(--border); }
+.result-card .rematch-card button.quiet:hover,.analysis-progress { color:var(--accent); background:var(--surface-hover); }
 </style>

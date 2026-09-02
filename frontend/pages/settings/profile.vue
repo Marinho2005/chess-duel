@@ -62,7 +62,13 @@ onBeforeUnmount(clearPreview)
 
 <template>
   <main class="settings-shell">
-    <NuxtLink class="back" to="/lobby">← Voltar para os desafios</NuxtLink>
+    <NuxtLink class="back" to="/lobby">← Voltar para Jogar</NuxtLink>
+
+    <section class="settings-card appearance-card">
+      <span class="eyebrow">APARÊNCIA</span><h1>Aparência</h1>
+      <p>Escolha como o ChessDuel aparece neste navegador.</p>
+      <SettingsThemeSwitcher />
+    </section>
 
     <section class="settings-card">
       <span class="eyebrow">MINHA CONTA</span>
@@ -87,9 +93,5 @@ onBeforeUnmount(clearPreview)
 </template>
 
 <style scoped>
-.settings-shell { min-height: 100vh; padding: clamp(1.2rem, 5vw, 4rem); color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }.back { color: #7f5130; text-decoration: none; }.back:hover { text-decoration: underline; }
-.settings-card { width: min(620px, 100%); margin: 5vh auto 0; padding: clamp(1.5rem, 5vw, 3rem); background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 22px; box-shadow: 0 20px 45px #6f45281c; }.eyebrow { color: #6f4528; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }.settings-card h1 { margin: 0.4rem 0; font: 500 2.5rem Georgia, serif; }.settings-card > p { margin: 0 0 2rem; color: #857060; }
-form, label { display: grid; gap: 0.6rem; }form { gap: 1.2rem; }label { color: #6e5847; font-size: 0.9rem; }input, select, button { padding: 0.9rem 1rem; color: inherit; background: white; border: 1px solid #dfd2c1; border-radius: 10px; font: inherit; }button { color: white; font-weight: 700; background: #6f4528; border-color: #6f4528; cursor: pointer; }button:disabled { opacity: 0.65; cursor: wait; }
-.rating { display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 1rem; padding: 1rem; background: #efe3cf; border-radius: 12px; }.rating strong { color: #6f4528; }.rating small { grid-column: 1 / -1; color: #806d5d; }.success, .error { margin: 0; text-align: center; }.success { color: #56784a; }.error { color: #b33e2e; }
-.avatar-editor { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #efe3cf; border-radius: 14px; }.avatar-editor img, .avatar-fallback { width: 76px; height: 76px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; }.avatar-fallback { display: grid; place-items: center; color: white; background: #6f4528; font: 700 1.7rem Georgia, serif; }.file-label { flex: 1; }.file-label input { width: 100%; padding: 0.6rem; }.file-label small { color: #806d5d; }
+.settings-shell{min-height:100vh;padding:clamp(1.2rem,5vw,4rem);color:var(--text);background:var(--bg)}.back{color:var(--accent);text-decoration:none}.back:hover{text-decoration:underline}.settings-card{width:min(720px,100%);margin:1.5rem auto 0;padding:clamp(1.5rem,5vw,3rem);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow)}.appearance-card{margin-top:5vh}.eyebrow{color:var(--accent);font-size:.72rem;font-weight:800;letter-spacing:.12em}.settings-card h1{margin:.4rem 0;font-size:2rem;letter-spacing:-.03em}.settings-card>p{margin:0 0 2rem;color:var(--text-muted)}form,label{display:grid;gap:.6rem}form{gap:1.2rem}label{color:var(--text-muted);font-size:.9rem}input,select,button{padding:.9rem 1rem;color:var(--text);background:var(--surface-strong);border:1px solid var(--border);border-radius:10px;font:inherit}button{color:var(--accent-ink);font-weight:700;background:var(--accent);border-color:var(--accent);cursor:pointer}button:disabled{opacity:.65;cursor:wait}.rating{display:grid;grid-template-columns:1fr auto;gap:.35rem 1rem;padding:1rem;background:var(--surface-strong);border-radius:12px}.rating strong{color:var(--accent)}.rating small{grid-column:1/-1;color:var(--text-muted)}.success,.error{margin:0;text-align:center}.success{color:var(--success)}.error{color:var(--danger)}.avatar-editor{display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--surface-strong);border-radius:14px}.avatar-editor img,.avatar-fallback{width:76px;height:76px;flex:0 0 auto;border-radius:50%;object-fit:cover}.avatar-fallback{display:grid;place-items:center;color:var(--accent-ink);background:var(--accent);font:700 1.7rem Georgia,serif}.file-label{flex:1}.file-label input{width:100%;padding:.6rem}.file-label small{color:var(--text-muted)}
 </style>

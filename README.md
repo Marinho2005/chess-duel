@@ -116,6 +116,40 @@ Esses números representam níveis aproximados de produto, não uma certificaç�
 de Elo. Toda jogada calculada retorna ao `GameServer`, que continua responsável
 por validar o lance, descontar o relógio e finalizar a partida.
 
+### Banco de puzzles do Lichess
+
+O dataset oficial é publicado pelo Lichess em CSV compactado com Zstandard e
+licença CC0. Não é necessário importar o arquivo inteiro. Baixe e descompacte:
+
+```bash
+curl -L https://database.lichess.org/lichess_db_puzzle.csv.zst \
+  -o backend/priv/repo/lichess_db_puzzle.csv.zst
+unzstd backend/priv/repo/lichess_db_puzzle.csv.zst \
+  -o backend/priv/repo/lichess_puzzles.csv
+```
+
+Depois das migrations, importe um subconjunto distribuído por rating:
+
+```bash
+cd backend
+mix ecto.migrate
+mix puzzles.import priv/repo/lichess_puzzles.csv
+```
+
+Por padrão, o importador lê o arquivo em streaming, aceita popularidade mínima
+80, limita a 50.000 puzzles e divide a cota igualmente entre cinco faixas de
+rating (`<1000`, `1000–1399`, `1400–1799`, `1800–2199`, `>=2200`). Isso evita
+carregar o CSV inteiro em memória e produz um conjunto inicial variado. Os
+parâmetros podem ser ajustados:
+
+```bash
+mix puzzles.import /caminho/amostra.csv --limit 10000 --minimum-popularity 90
+```
+
+No formato Lichess, o FEN antecede toda a sequência. O lance UCI de índice zero
+é aplicado automaticamente como preparação; o jogador resolve os índices
+ímpares, enquanto as respostas dos índices pares também são automáticas.
+
 O backend sobe em `http://localhost:4000`. Health check:
 
 ```bash
