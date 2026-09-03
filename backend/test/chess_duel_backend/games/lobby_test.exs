@@ -16,21 +16,21 @@ defmodule ChessDuelBackend.Games.LobbyTest do
              Lobby.create_challenge(white.id, black.id, "formato_inexistente")
 
     assert {:ok, %{challenges: [challenge]}} =
-             Lobby.create_challenge(white.id, black.id, "blitz_5_3")
+             Lobby.create_challenge(white.id, black.id, "blitz_5_0")
 
     assert challenge.challenger.nickname == "lobby_white"
-    assert challenge.time_control.label == "Blitz 5+3"
+    assert challenge.time_control.label == "Blitz 5+0"
 
     assert {:ok, game, %{challenges: []}} = Lobby.accept_challenge(challenge.id, black.id)
     assert game.white_player.id == white.id
     assert game.black_player.id == black.id
-    assert game.time_control.id == "blitz_5_3"
+    assert game.time_control.id == "blitz_5_0"
 
     assert {:ok, state} = GameServer.get_state(game.game_id)
     assert state.white_player_id == white.id
     assert state.black_player_id == black.id
     assert state.initial_time_ms == 300_000
-    assert state.increment_ms == 3_000
+    assert state.increment_ms == 0
     assert state.white_time_remaining_ms <= 300_000
     assert state.white_time_remaining_ms > 299_500
     assert state.black_time_remaining_ms == 300_000
@@ -38,7 +38,7 @@ defmodule ChessDuelBackend.Games.LobbyTest do
     Process.sleep(150)
     persisted_game = Games.get_game_by_game_id(game.game_id)
     assert persisted_game.initial_time_ms == 300_000
-    assert persisted_game.increment_ms == 3_000
+    assert persisted_game.increment_ms == 0
 
     {:ok, game_pid} = GameServer.start_or_get(game.game_id)
     DynamicSupervisor.terminate_child(ChessDuelBackend.GameSupervisor, game_pid)

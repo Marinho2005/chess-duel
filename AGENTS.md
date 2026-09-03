@@ -113,14 +113,14 @@ develop estável -> Pull Request -> main
 
 - [x] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes. Contas locais precisam confirmar o e-mail antes de receber token ou acessar o sistema; em desenvolvimento, o link é exibido no log do backend.
 - [x] **2.2 OAuth (login social)** — Login com Google, Discord e GitHub via Ueberauth e identidades externas genéricas; somente Google verificado vincula automaticamente por e-mail. Todos reutilizam o bearer token do frontend.
-- [x] **2.3 Perfil de jogador** — Página pública com foto de perfil (inicial como fallback), apelido, país, rating e data de criação; edição autenticada do próprio perfil e proteção das rotas privadas.
-- [x] **2.4 Sistema de rating** — ELO com K=32 atualizado de forma assíncrona, atômica e idempotente ao fim da partida; snapshots e histórico de variações persistidos para auditoria.
+- [x] **2.3 Perfil de jogador** — Página pública em `/user/:username` com foto de perfil (inicial como fallback), apelido, país, data de criação, estatísticas, partidas recentes e quatro ratings; edição autenticada do próprio perfil e proteção das rotas privadas.
+- [x] **2.4 Sistema de rating** — ELO com K=32 atualizado de forma assíncrona, atômica e idempotente ao fim da partida; ratings independentes para Bullet, Blitz (compartilhado por 3+0 e 5+0) e Rapid, com snapshots e histórico por categoria persistidos para auditoria.
 - [x] **2.5 Histórico de partidas** — Lista paginada das partidas finalizadas do usuário, com oponente, resultado sob sua perspectiva, motivo, variação de rating e data.
 
 ### Fase 3 — Matchmaking sério — COMPLETA
 
 - [x] **3.1 Fila por rating** — Fila por formato no Valkey, com pareamento periódico por proximidade de rating, tolerância crescente e entrada/cancelamento pelo lobby em tempo real.
-- [x] **3.2 Tempo configurável** — Bullet 1+0, Blitz 3+0, Blitz 5+3 e Rapid 10+0 selecionáveis nos desafios; tempo inicial e incremento Fischer são autoritativos no `GameServer` e persistidos por partida.
+- [x] **3.2 Tempo configurável** — Bullet 1+0, Blitz 3+0, Blitz 5+0 e Rapid 10+0 selecionáveis nos desafios; os relógios sem incremento são autoritativos no `GameServer` e persistidos por partida.
 - [x] **3.3 Salas privadas** — Criação de sala com link de convite, para jogar com amigos sem passar pela fila de matchmaking.
 
 ### Fase 4 — Puzzles e análise

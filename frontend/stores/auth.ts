@@ -8,8 +8,11 @@ export type AuthUser = {
   country_code: string | null
   avatar_url: string | null
   rating: number
+  ratings: PlayerRatings
   inserted_at: string
 }
+
+export type PlayerRatings = { bullet: number; blitz: number; rapid: number }
 
 export type GuestIdentity = {
   id: string

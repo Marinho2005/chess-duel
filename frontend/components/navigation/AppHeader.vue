@@ -58,7 +58,7 @@ watch(() => route.fullPath, closeMenus)
           <ChevronDown :size="17" aria-hidden="true" />
         </button>
         <div v-if="profileOpen" class="profile-menu" role="menu">
-          <NuxtLink v-if="auth.user" :to="`/profile/${encodeURIComponent(auth.user.nickname)}`" role="menuitem"><UserRound :size="17" />Perfil</NuxtLink>
+          <NuxtLink v-if="auth.user" :to="`/user/${encodeURIComponent(auth.user.nickname)}`" role="menuitem"><UserRound :size="17" />Perfil</NuxtLink>
           <NuxtLink to="/settings/profile" role="menuitem"><Settings :size="17" />Configurações</NuxtLink>
           <button type="button" role="menuitem" @click="logOut"><LogOut :size="17" />Sair</button>
         </div>

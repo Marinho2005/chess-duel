@@ -4,6 +4,7 @@ defmodule ChessDuelBackendWeb.UserController do
   alias ChessDuelBackend.Accounts
   alias ChessDuelBackend.Accounts.AvatarStorage
   alias ChessDuelBackendWeb.UserJSON
+  alias ChessDuelBackend.Games
 
   def me(conn, _params) do
     json(conn, %{user: UserJSON.data(conn.assigns.current_user)})
@@ -17,16 +18,28 @@ defmodule ChessDuelBackendWeb.UserController do
         |> json(%{error: "profile_not_found"})
 
       user ->
-        json(conn, %{profile: UserJSON.public_data(user)})
+        stats = Games.public_stats_for_user(user.id)
+        recent = Games.list_finished_games_for_user(user.id, page: 1, per_page: 5)
+
+        json(conn, %{
+          profile: UserJSON.public_data(user, %{stats: stats, recent_games: recent.games})
+        })
     end
   end
 
   def ranking(conn, params) do
     page = parse_page(params["page"])
-    ranking = Accounts.list_ranked_users(page)
+    category = parse_category(params["category"])
+    ranking = Accounts.list_ranked_users(page, category)
 
     json(conn, %{
-      players: Enum.map(ranking.users, &UserJSON.ranking_data/1),
+      category: category,
+      players:
+        ranking.users
+        |> Enum.with_index((ranking.page - 1) * ranking.page_size + 1)
+        |> Enum.map(fn {user, position} ->
+          user |> UserJSON.ranking_data(category) |> Map.put(:position, position)
+        end),
       pagination: Map.drop(ranking, [:users])
     })
   end
@@ -86,4 +99,9 @@ defmodule ChessDuelBackendWeb.UserController do
   end
 
   defp parse_page(_value), do: 1
+
+  defp parse_category(value) when value in ~w(bullet blitz rapid),
+    do: String.to_existing_atom(value)
+
+  defp parse_category(_), do: :blitz
 end

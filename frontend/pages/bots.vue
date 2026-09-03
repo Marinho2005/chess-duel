@@ -2,7 +2,7 @@
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 type Bot = { id: string; name: string; nickname: string; rating: number; difficulty: string; persona: string }
-type TimeControl = 'bullet_1_0' | 'blitz_3_0' | 'blitz_5_3' | 'rapid_10_0'
+type TimeControl = 'bullet_1_0' | 'blitz_3_0' | 'blitz_5_0' | 'rapid_10_0'
 type ColorChoice = 'white' | 'black' | 'random'
 
 const auth = useAuthStore()
@@ -27,7 +27,7 @@ const botPortrait = (id: string) => `/bots/${id}.webp`
 
 const controls = [
   { id: 'bullet_1_0', label: 'Bullet 1+0' }, { id: 'blitz_3_0', label: 'Blitz 3+0' },
-  { id: 'blitz_5_3', label: 'Blitz 5+3' }, { id: 'rapid_10_0', label: 'Rapid 10+0' }
+  { id: 'blitz_5_0', label: 'Blitz 5+0' }, { id: 'rapid_10_0', label: 'Rapid 10+0' }
 ] as const
 
 onMounted(async () => {

@@ -16,7 +16,7 @@ defmodule ChessDuelBackendWeb.RankingControllerTest do
 
       user
       |> User.confirm_changeset()
-      |> Ecto.Changeset.change(rating: 1_000 + index)
+      |> Ecto.Changeset.change(blitz_rating: 1_000 + index)
       |> Repo.update!()
     end
 

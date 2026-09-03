@@ -66,6 +66,36 @@ defmodule ChessDuelBackend.Games do
     }
   end
 
+  def public_stats_for_user(user_id) when is_binary(user_id) do
+    games =
+      from(g in Game,
+        where:
+          g.status == "finished" and
+            (g.white_player_id == ^user_id or g.black_player_id == ^user_id),
+        order_by: [asc: g.finished_at]
+      )
+      |> Repo.all()
+
+    results =
+      Enum.map(games, fn game -> result_for_player(game.result, player_color(game, user_id)) end)
+
+    wins = Enum.count(results, &(&1 == "win"))
+
+    %{
+      total_games: length(results),
+      win_rate: if(results == [], do: 0, else: Float.round(wins * 100 / length(results), 1)),
+      current_streak: current_streak(results)
+    }
+  end
+
+  defp current_streak([]), do: 0
+
+  defp current_streak(results) do
+    latest = List.last(results)
+    count = results |> Enum.reverse() |> Enum.take_while(&(&1 == latest)) |> length()
+    if latest == "win", do: count, else: -count
+  end
+
   defp history_entries([], _user_id), do: []
 
   defp history_entries(games, user_id) do
@@ -85,7 +115,7 @@ defmodule ChessDuelBackend.Games do
     rating_changes =
       from(change in RatingChange,
         where: change.user_id == ^user_id and change.game_id in ^game_ids,
-        select: {change.game_id, change.change}
+        select: {change.game_id, %{change: change.change, category: change.category}}
       )
       |> Repo.all()
       |> Map.new()
@@ -112,7 +142,8 @@ defmodule ChessDuelBackend.Games do
         color: color,
         result: result_for_player(game.result, color),
         end_reason: game.end_reason,
-        rating_change: Map.get(rating_changes, game.id),
+        rating_change: get_in(rating_changes, [game.id, :change]),
+        rating_category: get_in(rating_changes, [game.id, :category]),
         time_control:
           ChessDuelBackend.Games.TimeControl.from_values(
             game.initial_time_ms,
