@@ -127,17 +127,17 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
 
     ref =
       Phoenix.ChannelTest.push(creator_channel, "create_room", %{
-        "time_control" => "blitz_5_3"
+        "time_control" => "blitz_5_0"
       })
 
-    Phoenix.ChannelTest.assert_reply(ref, :ok, %{code: code, time_control: %{id: "blitz_5_3"}})
+    Phoenix.ChannelTest.assert_reply(ref, :ok, %{code: code, time_control: %{id: "blitz_5_0"}})
 
     ref = Phoenix.ChannelTest.push(opponent_channel, "join_room", %{"code" => code})
     Phoenix.ChannelTest.assert_reply(ref, :ok, %{state: :matched, game_id: game_id})
 
     assert {:ok, game} = GameServer.get_state(game_id)
     assert game.initial_time_ms == 300_000
-    assert game.increment_ms == 3_000
+    assert game.increment_ms == 0
     Process.sleep(200)
     {:ok, game_pid} = GameServer.start_or_get(game_id)
     DynamicSupervisor.terminate_child(ChessDuelBackend.GameSupervisor, game_pid)

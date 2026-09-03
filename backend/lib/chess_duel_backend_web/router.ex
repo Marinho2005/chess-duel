@@ -52,4 +52,10 @@ defmodule ChessDuelBackendWeb.Router do
     patch "/users/me", UserController, :update
     post "/users/me/avatar", UserController, :update_avatar
   end
+
+  scope "/api", ChessDuelBackendWeb do
+    pipe_through :api
+
+    get "/users/:nickname", UserController, :show
+  end
 end

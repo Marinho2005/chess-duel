@@ -4,6 +4,7 @@ defmodule ChessDuelBackend.Games.Matchmaker do
   use GenServer
 
   alias ChessDuelBackend.Games.{GameServer, TimeControl}
+  alias ChessDuelBackend.Accounts.User
 
   require Logger
 
@@ -36,9 +37,10 @@ defmodule ChessDuelBackend.Games.Matchmaker do
   def handle_call({:join_queue, user, time_control_id}, _from, state) do
     with {:ok, control} <- TimeControl.fetch(time_control_id),
          :ok <- remove_user_from_all_queues(user.id),
-         {:ok, member} <- encode_member(user),
+         {:ok, member} <- encode_member(user, control),
+         rating = User.rating_for(user, TimeControl.rating_category(control)),
          {:ok, _result} <-
-           Redix.command(:valkey, ["ZADD", queue_key(control.id), user.rating, member]) do
+           Redix.command(:valkey, ["ZADD", queue_key(control.id), rating, member]) do
       {:reply, {:ok, %{time_control: control, joined_at: Jason.decode!(member)["joined_at"]}},
        state}
     else
@@ -206,10 +208,10 @@ defmodule ChessDuelBackend.Games.Matchmaker do
     end
   end
 
-  defp encode_member(user) do
+  defp encode_member(user, control) do
     Jason.encode(%{
       user_id: user.id,
-      rating: user.rating,
+      rating: User.rating_for(user, TimeControl.rating_category(control)),
       joined_at: System.system_time(:millisecond)
     })
   end

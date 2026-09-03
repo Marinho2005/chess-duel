@@ -31,13 +31,13 @@ defmodule ChessDuelBackend.Games.MatchmakerTest do
     Phoenix.PubSub.subscribe(ChessDuelBackend.PubSub, "matchmaking:#{first.id}")
     Phoenix.PubSub.subscribe(ChessDuelBackend.PubSub, "matchmaking:#{second.id}")
 
-    assert {:ok, _queue} = Matchmaker.join_queue(first, "blitz_5_3")
-    assert {:ok, _queue} = Matchmaker.join_queue(second, "blitz_5_3")
+    assert {:ok, _queue} = Matchmaker.join_queue(first, "blitz_5_0")
+    assert {:ok, _queue} = Matchmaker.join_queue(second, "blitz_5_0")
     assert :ok = Matchmaker.match_now()
 
     assert_receive %Phoenix.Socket.Broadcast{
                      event: "match_found",
-                     payload: %{game_id: game_id, time_control: %{id: "blitz_5_3"}}
+                     payload: %{game_id: game_id, time_control: %{id: "blitz_5_0"}}
                    },
                    1_000
 
@@ -47,14 +47,14 @@ defmodule ChessDuelBackend.Games.MatchmakerTest do
                    },
                    1_000
 
-    assert {:ok, []} = Matchmaker.queue_entries("blitz_5_3")
+    assert {:ok, []} = Matchmaker.queue_entries("blitz_5_0")
     assert {:ok, state} = GameServer.get_state(game_id)
 
     assert Enum.sort([state.white_player_id, state.black_player_id]) ==
              Enum.sort([first.id, second.id])
 
     assert state.initial_time_ms == 300_000
-    assert state.increment_ms == 3_000
+    assert state.increment_ms == 0
 
     stop_game(game_id)
   end

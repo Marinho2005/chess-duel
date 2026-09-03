@@ -19,8 +19,10 @@ defmodule ChessDuelBackend.RatingsTest do
     assert rating.white == %{id: white.id, before: 1200, after: 1216}
     assert rating.black == %{id: black.id, before: 1200, after: 1184}
 
-    assert Accounts.get_user!(white.id).rating == 1216
-    assert Accounts.get_user!(black.id).rating == 1184
+    assert Accounts.get_user!(white.id).blitz_rating == 1216
+    assert Accounts.get_user!(black.id).blitz_rating == 1184
+    assert Accounts.get_user!(white.id).bullet_rating == 1200
+    assert Accounts.get_user!(white.id).rapid_rating == 1200
 
     rated_game = Games.get_game!(game.id)
     assert rated_game.rated_at
@@ -35,7 +37,7 @@ defmodule ChessDuelBackend.RatingsTest do
            ) == 2
 
     assert {:ok, :already_rated} = Ratings.rate_game(game.game_id)
-    assert Accounts.get_user!(white.id).rating == 1216
+    assert Accounts.get_user!(white.id).blitz_rating == 1216
     assert Repo.aggregate(RatingChange, :count) == 2
   end
 
@@ -60,9 +62,33 @@ defmodule ChessDuelBackend.RatingsTest do
     {:ok, game} = finished_game(white.id, black.id, "abandoned")
 
     assert {:error, :game_not_rateable} = Ratings.rate_game(game.game_id)
-    assert Accounts.get_user!(white.id).rating == 1200
-    assert Accounts.get_user!(black.id).rating == 1200
+    assert Accounts.get_user!(white.id).blitz_rating == 1200
+    assert Accounts.get_user!(black.id).blitz_rating == 1200
     refute Games.get_game!(game.id).rated_at
+  end
+
+  test "isola o ELO nas tres modalidades e compartilha blitz 3+0 e 5+0" do
+    controls = [
+      {:bullet, 60_000, 0},
+      {:blitz, 180_000, 0},
+      {:blitz, 300_000, 0},
+      {:rapid, 600_000, 0}
+    ]
+
+    Enum.with_index(controls, fn {category, initial, increment}, index ->
+      white = register_user("mode-white-#{index}@example.com", "mode_white_#{index}")
+      black = register_user("mode-black-#{index}@example.com", "mode_black_#{index}")
+      {:ok, game} = finished_game(white.id, black.id, "white_wins", initial, increment)
+      assert {:ok, %{category: ^category}} = Ratings.rate_game(game.game_id)
+
+      updated = Accounts.get_user!(white.id)
+      assert ChessDuelBackend.Accounts.User.rating_for(updated, category) == 1216
+
+      assert Enum.all?(
+               [:bullet, :blitz, :rapid] -- [category],
+               &(ChessDuelBackend.Accounts.User.rating_for(updated, &1) == 1200)
+             )
+    end)
   end
 
   defp register_user(email, nickname) do
@@ -72,7 +98,7 @@ defmodule ChessDuelBackend.RatingsTest do
     user
   end
 
-  defp finished_game(white_id, black_id, result) do
+  defp finished_game(white_id, black_id, result, initial \\ 180_000, increment \\ 0) do
     Games.create_game(%{
       game_id: Ecto.UUID.generate(),
       status: "finished",
@@ -80,7 +106,9 @@ defmodule ChessDuelBackend.RatingsTest do
       black_player_id: black_id,
       result: result,
       end_reason: if(result == "draw", do: "draw", else: "checkmate"),
-      finished_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      finished_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      initial_time_ms: initial,
+      increment_ms: increment
     })
   end
 end

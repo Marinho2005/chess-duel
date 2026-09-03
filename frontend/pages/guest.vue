@@ -3,13 +3,13 @@ import { Socket, type Channel } from 'phoenix'
 
 definePageMeta({ layout: false })
 
-type TimeControlId = 'bullet_1_0' | 'blitz_3_0' | 'blitz_5_3' | 'rapid_10_0'
+type TimeControlId = 'bullet_1_0' | 'blitz_3_0' | 'blitz_5_0' | 'rapid_10_0'
 type PrivateRoom = { code: string; time_control: { label: string } }
 
 const timeControls = [
   { id: 'bullet_1_0', label: 'Bullet 1+0' },
   { id: 'blitz_3_0', label: 'Blitz 3+0' },
-  { id: 'blitz_5_3', label: 'Blitz 5+3' },
+  { id: 'blitz_5_0', label: 'Blitz 5+0' },
   { id: 'rapid_10_0', label: 'Rapid 10+0' }
 ] as const
 

@@ -14,7 +14,7 @@ defmodule ChessDuelBackend.Games.RematchesTest do
     original_id = Ecto.UUID.generate()
     white = Ecto.UUID.generate()
     black = Ecto.UUID.generate()
-    {:ok, control} = TimeControl.fetch("blitz_5_3")
+    {:ok, control} = TimeControl.fetch("blitz_5_0")
 
     assert {:ok, _state} = GameServer.reserve_players(original_id, white, black, control)
     assert {:ok, _finished} = GameServer.resign(original_id, white)
@@ -25,7 +25,7 @@ defmodule ChessDuelBackend.Games.RematchesTest do
     assert rematch.white_player_id == black
     assert rematch.black_player_id == white
     assert rematch.initial_time_ms == 300_000
-    assert rematch.increment_ms == 3_000
+    assert rematch.increment_ms == 0
 
     assert {:ok, %{game_id: ^rematch_id}} = Rematches.accept(original_id, black)
     cleanup(original_id)

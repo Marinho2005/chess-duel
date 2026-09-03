@@ -2,6 +2,7 @@ defmodule ChessDuelBackend.Games.Lobby do
   use GenServer
 
   alias ChessDuelBackend.Games.{GameServer, TimeControl}
+  alias ChessDuelBackend.Accounts.User
 
   def start_link(_opts), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
@@ -29,7 +30,8 @@ defmodule ChessDuelBackend.Games.Lobby do
     user_data = %{
       id: user.id,
       nickname: user.nickname,
-      rating: user.rating,
+      rating: user.blitz_rating,
+      ratings: User.ratings(user),
       avatar_url: user.avatar_path
     }
 

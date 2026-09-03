@@ -11,6 +11,9 @@ defmodule ChessDuelBackend.Accounts.User do
     field :country_code, :string
     field :avatar_path, :string
     field :rating, :integer, default: 1200
+    field :bullet_rating, :integer, default: 1200
+    field :blitz_rating, :integer, default: 1200
+    field :rapid_rating, :integer, default: 1200
     field :puzzle_rating, :integer, default: 1200
     field :battle_rating, :integer, default: 1200
     field :password, :string, virtual: true, redact: true
@@ -67,6 +70,24 @@ defmodule ChessDuelBackend.Accounts.User do
   def rating_changeset(user, rating) when is_integer(rating) do
     change(user, rating: rating)
   end
+
+  def rating_for(user, category), do: Map.fetch!(user, rating_field(category))
+
+  def category_rating_changeset(user, category, rating) when is_integer(rating) do
+    change(user, [{rating_field(category), rating}])
+  end
+
+  def ratings(user) do
+    %{
+      bullet: user.bullet_rating,
+      blitz: user.blitz_rating,
+      rapid: user.rapid_rating
+    }
+  end
+
+  def rating_field(:bullet), do: :bullet_rating
+  def rating_field(:blitz), do: :blitz_rating
+  def rating_field(:rapid), do: :rapid_rating
 
   def puzzle_rating_changeset(user, rating) when is_integer(rating) do
     change(user, puzzle_rating: rating)

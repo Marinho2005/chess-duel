@@ -59,8 +59,8 @@ defmodule ChessDuelBackend.Games.GameServerRatingTest do
     assert game.result == "black_wins"
     assert game.end_reason == "abandonment"
     assert game.rated_at
-    assert Accounts.get_user!(white.id).rating == 1184
-    assert Accounts.get_user!(black.id).rating == 1216
+    assert Accounts.get_user!(white.id).blitz_rating == 1184
+    assert Accounts.get_user!(black.id).blitz_rating == 1216
   end
 
   defp register_user(email, nickname) do

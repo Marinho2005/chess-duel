@@ -5,6 +5,7 @@ defmodule ChessDuelBackend.Ratings do
 
   alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackend.Games.Game
+  alias ChessDuelBackend.Games.TimeControl
   alias ChessDuelBackend.Ratings.{Elo, RatingChange}
   alias ChessDuelBackend.Repo
 
@@ -51,13 +52,16 @@ defmodule ChessDuelBackend.Ratings do
   end
 
   defp persist_rating(game, white, black, result) do
-    calculation = Elo.calculate(white.rating, black.rating, result)
+    category = TimeControl.rating_category(game.initial_time_ms, game.increment_ms)
 
-    white = Repo.update!(User.rating_changeset(white, calculation.white_after))
-    black = Repo.update!(User.rating_changeset(black, calculation.black_after))
+    calculation =
+      Elo.calculate(User.rating_for(white, category), User.rating_for(black, category), result)
 
-    insert_change!(game, white, calculation.white_before, calculation.white_after)
-    insert_change!(game, black, calculation.black_before, calculation.black_after)
+    white = Repo.update!(User.category_rating_changeset(white, category, calculation.white_after))
+    black = Repo.update!(User.category_rating_changeset(black, category, calculation.black_after))
+
+    insert_change!(game, white, category, calculation.white_before, calculation.white_after)
+    insert_change!(game, black, category, calculation.black_before, calculation.black_after)
 
     rated_at = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -74,19 +78,21 @@ defmodule ChessDuelBackend.Ratings do
     {:ok,
      %{
        game_id: game.game_id,
+       category: category,
        white: %{id: white.id, before: calculation.white_before, after: calculation.white_after},
        black: %{id: black.id, before: calculation.black_before, after: calculation.black_after}
      }}
   end
 
-  defp insert_change!(game, user, before, after_rating) do
+  defp insert_change!(game, user, category, before, after_rating) do
     %RatingChange{}
     |> RatingChange.changeset(%{
       game_id: game.id,
       user_id: user.id,
       rating_before: before,
       rating_after: after_rating,
-      change: after_rating - before
+      change: after_rating - before,
+      category: category
     })
     |> Repo.insert!()
   end

@@ -5,6 +5,8 @@ export type RankedPlayer = {
   id: string
   nickname: string
   avatar_url: string | null
+  country_code?: string | null
+  position?: number
   rating: number
 }
 
@@ -29,7 +31,7 @@ defineProps<{
         :alt="`Avatar de ${player.nickname}`"
       >
       <span v-else class="avatar fallback" aria-hidden="true">{{ player.nickname.charAt(0).toUpperCase() }}</span>
-      <NuxtLink :to="`/profile/${encodeURIComponent(player.nickname)}`">{{ player.nickname }}</NuxtLink>
+      <NuxtLink :to="`/user/${encodeURIComponent(player.nickname)}`">{{ player.nickname }}</NuxtLink>
       <strong>{{ player.rating }} <small>rating</small></strong>
     </article>
   </div>

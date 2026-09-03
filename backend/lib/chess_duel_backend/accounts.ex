@@ -67,12 +67,13 @@ defmodule ChessDuelBackend.Accounts do
 
   @ranking_page_size 50
 
-  def list_ranked_users(page \\ 1) when is_integer(page) and page > 0 do
+  def list_ranked_users(page \\ 1, category \\ :blitz) when is_integer(page) and page > 0 do
     base_query = from(user in User, where: not is_nil(user.confirmed_at))
+    field = User.rating_field(category)
 
     users =
       base_query
-      |> order_by([user], desc: user.rating, asc: user.nickname, asc: user.id)
+      |> order_by([user], desc: field(user, ^field), asc: user.nickname, asc: user.id)
       |> limit(^@ranking_page_size)
       |> offset(^((page - 1) * @ranking_page_size))
       |> Repo.all()
