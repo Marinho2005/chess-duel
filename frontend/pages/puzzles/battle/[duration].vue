@@ -111,12 +111,11 @@ async function handleMove(move: { from: Key; to: Key; promotion?: 'q' }) {
   const oldFen = chess.fen(); const oldLastMove = lastMove.value
   let playedMove: ReturnType<Chess['move']>
   try { playedMove = chess.move({ from: move.from as Square, to: move.to as Square, promotion: move.promotion }) } catch { return }
-  boardFen.value = chess.fen(); lastMove.value = [move.from, move.to]; updateBoard()
+  boardFen.value = chess.fen(); lastMove.value = [move.from, move.to]; updateBoard(); sounds.play(soundForSan(playedMove.san))
   submitting.value = true
   battleChannel.push('attempt', { from: move.from, to: move.to, promotion: move.promotion, index: expectedIndex.value })
     .receive('ok', (reply: AttemptResult) => {
       submitting.value = false; progress.value = reply.progress
-      if (reply.status === 'correct') sounds.play(soundForSan(playedMove.san))
       if (reply.puzzle) preparePuzzle(reply.puzzle)
       else if (!reply.resolved && reply.automatic_move) { applyAutomaticMove(reply.automatic_move); expectedIndex.value = reply.next_index || expectedIndex.value + 2 }
       else if (reply.status === 'incorrect') restore(oldFen, oldLastMove)

@@ -31,6 +31,8 @@ defmodule ChessDuelBackendWeb.Router do
     post "/users/log_in", UserSessionController, :create
     get "/profiles/:nickname", UserController, :show
     get "/ranking", UserController, :ranking
+    get "/games/live", LiveGameController, :index
+    get "/broadcasts/live", BroadcastController, :index
   end
 
   scope "/api", ChessDuelBackendWeb do

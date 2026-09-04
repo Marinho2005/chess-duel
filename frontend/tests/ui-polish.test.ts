@@ -63,7 +63,10 @@ describe('tamanho do layout da partida', () => {
 describe('país', () => {
   it('normaliza ISO válido e mantém ausência de país', () => {
     expect(normalizeCountryCode('br')).toBe('BR')
+    expect(normalizeCountryCode('BRA')).toBe('BR')
+    expect(normalizeCountryCode('USA')).toBe('US')
     expect(countryFlag('BR')).toBe('🇧🇷')
+    expect(countryFlag('BRA')).toBe('🇧🇷')
     expect(countryFlag(null)).toBe('')
   })
 })
