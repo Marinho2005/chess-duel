@@ -46,6 +46,29 @@ defmodule ChessDuelBackend.Games.LobbyTest do
     Lobby.disconnect(black.id)
   end
 
+  test "presenca controla visibilidade e recebimento de desafios" do
+    online = register_user("presence-online@example.com", "presence_online")
+    other = register_user("presence-other@example.com", "presence_other")
+
+    Lobby.connect(online)
+    Lobby.connect(other)
+
+    assert {:ok, %{users: users}} = Lobby.set_presence(other.id, "away")
+    assert Enum.find(users, &(&1.id == other.id)).status == "away"
+
+    assert {:ok, %{users: users}} = Lobby.set_presence(other.id, "dnd")
+    assert Enum.find(users, &(&1.id == other.id)).status == "dnd"
+    assert {:error, :user_unavailable} = Lobby.create_challenge(online.id, other.id)
+
+    assert {:ok, %{users: users}} = Lobby.set_presence(other.id, "invisible")
+    refute Enum.any?(users, &(&1.id == other.id))
+
+    assert {:error, :invalid_presence} = Lobby.set_presence(other.id, "busy-ish")
+
+    Lobby.disconnect(online.id)
+    Lobby.disconnect(other.id)
+  end
+
   defp register_user(email, nickname) do
     {:ok, user} =
       Accounts.register_user(%{

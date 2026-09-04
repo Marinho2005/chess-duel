@@ -139,6 +139,7 @@ async function handleMove(move: { from: Key; to: Key; promotion?: 'q' }) {
   boardFen.value = chess.fen()
   lastMove.value = [move.from, move.to]
   updateBoardState()
+  sounds.play(soundForSan(playedMove.san))
   submitting.value = true
   feedback.value = 'idle'
   errorMessage.value = ''
@@ -153,7 +154,6 @@ async function handleMove(move: { from: Key; to: Key; promotion?: 'q' }) {
     errorMessage.value = 'Não foi possível validar o lance. Tente novamente.'
     return
   }
-  if (result.data.status === 'correct') sounds.play(soundForSan(playedMove.san))
   if (mode.value === 'rush') handleRushResult(result.data as RushAttempt, previousFen, previousLastMove)
   else handleTrainingResult(result.data as AttemptResult, previousFen, previousLastMove)
 }

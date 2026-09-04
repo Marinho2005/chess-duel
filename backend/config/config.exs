@@ -25,6 +25,13 @@ config :chess_duel_backend, :stockfish,
   hash_mb: 32,
   threads: 1
 
+config :chess_duel_backend, :lichess_broadcasts,
+  base_url: "https://lichess.org",
+  poll_interval_ms: 20_000,
+  timeout_ms: 5_000,
+  max_rounds: 4,
+  user_agent: "ChessDuel/0.1 (Lichess broadcast viewer)"
+
 # Configuracao do endpoint
 config :chess_duel_backend, ChessDuelBackendWeb.Endpoint,
   url: [host: "localhost"],

@@ -29,10 +29,31 @@ function validateMove(request) {
   }
 }
 
+function parsePgn(pgn) {
+  const chunks = pgn.trim().split(/\n\s*\n(?=\[Event\s)/)
+
+  return chunks.filter(Boolean).map((source) => {
+    const chess = new Chess()
+    chess.loadPgn(source, { strict: false })
+    const headers = chess.getHeaders()
+    const moves = chess.history({ verbose: true }).map((move) => ({
+      san: move.san,
+      from: move.from,
+      to: move.to,
+      promotion: move.promotion ?? null,
+    }))
+
+    return { headers, moves, fen: chess.fen() }
+  })
+}
+
 lines.on('line', (line) => {
   try {
     const request = JSON.parse(line)
-    process.stdout.write(`${JSON.stringify(validateMove(request))}\n`)
+    const response = request.action === 'parse_pgn'
+      ? { ok: true, games: parsePgn(request.pgn) }
+      : validateMove(request)
+    process.stdout.write(`${JSON.stringify(response)}\n`)
   } catch (_error) {
     process.stdout.write(`${JSON.stringify({ valid: false, reason: 'illegal_move' })}\n`)
   }

@@ -36,6 +36,42 @@ defmodule ChessDuelBackend.GameAnalysis.Stockfish do
     end
   end
 
+  def evaluate(moves, opts \\ []) when is_list(moves) do
+    config = Application.get_env(:chess_duel_backend, :stockfish, [])
+    executable = Keyword.get(opts, :path) || Keyword.get(config, :path) || find_executable()
+    depth = Keyword.get(opts, :depth, Keyword.get(config, :depth, 12))
+
+    with {:ok, engine} <- open(executable),
+         :ok <- initialize(engine, config) do
+      played = Enum.map_join(moves, " ", &uci_move/1)
+
+      command =
+        if played == "", do: "position startpos\n", else: "position startpos moves #{played}\n"
+
+      Port.command(engine, command)
+      Port.command(engine, "go depth #{depth}\n")
+      result = await_bestmove(engine, nil)
+      Port.command(engine, "quit\n")
+
+      case result do
+        {:ok, %{score: _score} = position} ->
+          normalized = normalize(position, length(moves))
+
+          {:ok,
+           %{
+             evaluation: normalized.score,
+             principal_variation: normalized.pv || []
+           }}
+
+        {:ok, _position} ->
+          {:error, "Stockfish não retornou uma avaliação"}
+
+        error ->
+          error
+      end
+    end
+  end
+
   def classify(_loss, played, best) when played == best, do: "best"
   def classify(loss, _played, _best) when loss <= 10, do: "best"
   def classify(loss, _played, _best) when loss <= 50, do: "good"

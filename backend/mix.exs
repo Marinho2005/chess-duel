@@ -40,6 +40,7 @@ defmodule ChessDuelBackend.MixProject do
       {:postgrex, ">= 0.19.0"},
       {:oban, "~> 2.20"},
       {:redix, "~> 1.5"},
+      {:req, "~> 0.5"},
       {:cors_plug, "~> 3.0"},
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.7"},

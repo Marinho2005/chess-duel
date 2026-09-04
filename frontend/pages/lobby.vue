@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
 import { ArrowRight, Brain, Eye, Flame, Monitor, Puzzle, Swords, Trophy } from 'lucide-vue-next'
+import type { BroadcastGame, ChessDuelLiveGame, BroadcastsApiResponse, ChessDuelLiveApiResponse } from '~/types/live-games'
+import { combineLiveFeed } from '~/utils/liveGames'
+import LobbyBroadcastCard from '~/components/live/BroadcastLiveCard.vue'
+import LobbyChessDuelLiveCard from '~/components/live/ChessDuelLiveCard.vue'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
-type LobbyUser = { id: string; nickname: string; rating: number; avatar_url: string | null }
+type PresenceStatus = 'online' | 'away' | 'dnd' | 'invisible'
+type LobbyUser = { id: string; nickname: string; rating: number; avatar_url: string | null; status: PresenceStatus }
 type TimeControl = { id: string; label: string; initial_time_ms: number; increment_ms: number }
 type Challenge = { id: string; challenger: LobbyUser; challenged: LobbyUser; time_control: TimeControl }
 type LobbyState = { users: LobbyUser[]; challenges: Challenge[] }
@@ -27,6 +32,14 @@ const timeControls = [
   { id: 'rapid_10_0', label: 'Rapid 10+0' }
 ] as const
 
+const presenceOptions: Array<{ id: PresenceStatus; label: string; description: string }> = [
+  { id: 'online', label: 'Online agora', description: 'Você aparece disponível.' },
+  { id: 'away', label: 'Ausente', description: 'Você aparece como ausente.' },
+  { id: 'dnd', label: 'Não perturbar', description: 'Você não receberá novos desafios.' },
+  { id: 'invisible', label: 'Invisível', description: 'Você aparecerá offline.' }
+]
+const presenceStorageKey = 'chess-duel:presence'
+
 const auth = useAuthStore()
 const users = ref<LobbyUser[]>([])
 const challenges = ref<Challenge[]>([])
@@ -42,6 +55,18 @@ const config = useRuntimeConfig()
 const recentGames = ref<RecentGame[]>([])
 const gamesTotal = ref(0)
 const historyLoading = ref(true)
+const broadcasts = ref<BroadcastGame[]>([])
+const chessDuelGames = ref<ChessDuelLiveGame[]>([])
+const liveGamesLoading = ref(true)
+const liveGamesError = ref('')
+const presence = ref<PresenceStatus>('online')
+const presenceOpen = ref(false)
+const presencePicker = ref<HTMLElement | null>(null)
+const connectionReady = ref(false)
+let liveGamesPollingTimer: ReturnType<typeof setInterval> | null = null
+
+const liveFeedItems = computed(() => combineLiveFeed(broadcasts.value, chessDuelGames.value))
+const selectedPresence = computed(() => presenceOptions.find(option => option.id === presence.value) || presenceOptions[0]!)
 
 let socket: Socket | null = null
 let channel: Channel | null = null
@@ -57,9 +82,17 @@ const privateRoomLink = computed(() => privateRoom.value && import.meta.client
 const recentWins = computed(() => recentGames.value.filter(game => game.result === 'win').length)
 const recentRatingChange = computed(() => recentGames.value.reduce((total, game) => total + (game.rating_change || 0), 0))
 const recentWinRate = computed(() => recentGames.value.length ? Math.round((recentWins.value / recentGames.value.length) * 100) : 0)
+const resultLabels: Record<RecentGame['result'], string> = {
+  win: 'Vitória',
+  loss: 'Derrota',
+  draw: 'Empate'
+}
 
 onMounted(async () => {
   auth.restoreSession()
+  const savedPresence = localStorage.getItem(presenceStorageKey)
+  if (presenceOptions.some(option => option.id === savedPresence)) presence.value = savedPresence as PresenceStatus
+  document.addEventListener('pointerdown', closePresenceMenu)
 
   if (!auth.token || !(await auth.fetchCurrentUser())) {
     await navigateTo('/')
@@ -70,13 +103,17 @@ onMounted(async () => {
   if (!currentUser) return
 
   void loadDashboardHistory()
+  void fetchLiveGames(true)
+  liveGamesPollingTimer = setInterval(() => {
+    void fetchLiveGames(false)
+  }, 20_000)
 
   const backendUrl = useRuntimeConfig().public.api.baseURL
   const websocketUrl = `${backendUrl.replace(/^http/, 'ws').replace(/\/$/, '')}/socket`
   socket = new Socket(websocketUrl, { params: { token: auth.token } })
   socket.connect()
 
-  channel = socket.channel('games:lobby', {})
+  channel = socket.channel('games:lobby', { status: presence.value })
   channel.join()
     .receive('ok', applyLobbyState)
     .receive('error', () => { status.value = 'Nao foi possivel entrar no salao.' })
@@ -106,8 +143,12 @@ onMounted(async () => {
     .receive('error', () => { errorMessage.value = 'Não foi possível acessar as salas privadas.' })
   privateRoomChannel.on('match_found', enterPrivateGame)
 
-  socket.onError(() => { status.value = 'Reconectando...' })
+  socket.onError(() => {
+    connectionReady.value = false
+    status.value = 'Reconectando...'
+  })
   socket.onClose(() => {
+    connectionReady.value = false
     if (searchingMatch.value) {
       searchingMatch.value = false
       matchmakingMessage.value = 'Busca cancelada pela desconexão.'
@@ -141,9 +182,48 @@ function relativeDate(value: string) {
   return formatter.format(-Math.round(elapsed / 86_400_000), 'day')
 }
 
-const resultLabels = { win: 'Vitória', loss: 'Derrota', draw: 'Empate' }
+async function fetchLiveGames(isInitial = false) {
+  if (isInitial && !broadcasts.value.length && !chessDuelGames.value.length) {
+    liveGamesLoading.value = true
+  }
+
+  let broadcastFailed = false
+  let chessDuelFailed = false
+
+  const [broadcastResult, chessDuelResult] = await Promise.allSettled([
+    $fetch<BroadcastsApiResponse>('/api/broadcasts/live', { baseURL: config.public.api.baseURL }),
+    $fetch<ChessDuelLiveApiResponse>('/api/games/live', { baseURL: config.public.api.baseURL })
+  ])
+
+  if (broadcastResult.status === 'fulfilled') {
+    broadcasts.value = broadcastResult.value?.games || []
+  } else {
+    broadcastFailed = true
+  }
+
+  if (chessDuelResult.status === 'fulfilled') {
+    chessDuelGames.value = chessDuelResult.value?.games || []
+  } else {
+    chessDuelFailed = true
+  }
+
+  if (broadcastFailed && chessDuelFailed) {
+    if (!broadcasts.value.length && !chessDuelGames.value.length) {
+      liveGamesError.value = 'Não foi possível carregar as partidas ao vivo.'
+    }
+  } else {
+    liveGamesError.value = ''
+  }
+
+  liveGamesLoading.value = false
+}
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closePresenceMenu)
+  if (liveGamesPollingTimer) {
+    clearInterval(liveGamesPollingTimer)
+    liveGamesPollingTimer = null
+  }
   if (searchingMatch.value) matchmakingChannel?.push('leave_queue', {})
   matchmakingChannel?.leave()
   privateRoomChannel?.leave()
@@ -154,8 +234,23 @@ onBeforeUnmount(() => {
 function applyLobbyState(state: LobbyState) {
   users.value = state.users
   challenges.value = state.challenges
-  status.value = 'Online agora'
+  connectionReady.value = true
+  status.value = selectedPresence.value.label
   errorMessage.value = ''
+}
+
+function selectPresence(nextPresence: PresenceStatus) {
+  presence.value = nextPresence
+  presenceOpen.value = false
+  localStorage.setItem(presenceStorageKey, nextPresence)
+  if (connectionReady.value) status.value = selectedPresence.value.label
+
+  channel?.push('set_presence', { status: nextPresence })
+    .receive('error', showChannelError)
+}
+
+function closePresenceMenu(event: PointerEvent) {
+  if (!presencePicker.value?.contains(event.target as Node)) presenceOpen.value = false
 }
 
 function challenge(userId: string) {
@@ -228,6 +323,8 @@ function decline(challengeId: string) {
 function showChannelError(error: { reason?: string }) {
   const messages: Record<string, string> = {
     user_offline: 'Esse jogador saiu do salao.',
+    user_unavailable: 'Esse jogador não está recebendo desafios agora.',
+    invalid_presence: 'Escolha um status de presença válido.',
     challenge_already_exists: 'Voce ja desafiou esse jogador.',
     challenge_not_found: 'Esse desafio nao esta mais disponivel.',
     invalid_time_control: 'Escolha um formato de tempo válido.',
@@ -265,7 +362,28 @@ async function logOut() {
       </section>
 
       <section id="matchmaking" class="play-bar" aria-label="Buscar partida">
-        <p class="connection"><span /> {{ status }}</p>
+        <div ref="presencePicker" class="presence-picker" @keydown.esc="presenceOpen = false">
+          <button class="connection presence-trigger" type="button" :disabled="!connectionReady" :aria-expanded="presenceOpen" aria-haspopup="menu" @click="presenceOpen = !presenceOpen">
+            <span class="presence-dot" :class="presence" aria-hidden="true" />
+            <span aria-live="polite">{{ status }}</span>
+            <span class="presence-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div v-if="presenceOpen" class="presence-menu" role="menu" aria-label="Definir status">
+            <button
+              v-for="option in presenceOptions"
+              :key="option.id"
+              type="button"
+              role="menuitemradio"
+              :aria-checked="presence === option.id"
+              class="presence-option"
+              @click="selectPresence(option.id)"
+            >
+              <span class="presence-dot" :class="option.id" aria-hidden="true" />
+              <span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span>
+              <span v-if="presence === option.id" class="presence-check" aria-hidden="true">✓</span>
+            </button>
+          </div>
+        </div>
         <label class="time-control">
           <span class="sr-only">Formato</span>
           <select v-model="selectedTimeControl" :disabled="searchingMatch">
@@ -287,11 +405,34 @@ async function logOut() {
       <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
       <section id="live-games" class="live-games-section" aria-labelledby="live-title">
-        <header class="live-heading"><p><span aria-hidden="true" /> <strong id="live-title">Partidas ao vivo</strong></p><small>Atualização automática</small></header>
-        <div class="live-empty">
+        <header class="live-heading">
+          <p>
+            <span aria-hidden="true" />
+            <strong id="live-title">Partidas ao vivo</strong>
+          </p>
+          <small>Atualização a cada 20s</small>
+        </header>
+
+        <div v-if="liveGamesLoading && !liveFeedItems.length" class="live-loading-grid" aria-label="Carregando partidas ao vivo">
+          <div v-for="i in 4" :key="i" class="card-skeleton" />
+        </div>
+
+        <div v-else-if="liveGamesError && !liveFeedItems.length" class="live-error">
+          <p>{{ liveGamesError }}</p>
+          <button type="button" @click="fetchLiveGames(true)">Tentar novamente</button>
+        </div>
+
+        <div v-else-if="!liveFeedItems.length" class="live-empty">
           <Eye :size="42" aria-hidden="true" />
-          <strong>As partidas públicas aparecerão aqui</strong>
-          <p>O lobby ainda não recebe a lista de jogos em andamento. A área está pronta para os previews quando essa fonte estiver disponível.</p>
+          <strong>Nenhuma partida ao vivo no momento.</strong>
+          <p>Quando houver torneios oficiais em andamento ou jogadores em duelo no ChessDuel, as partidas aparecerão aqui automaticamente.</p>
+        </div>
+
+        <div v-else class="live-grid">
+          <template v-for="item in liveFeedItems" :key="item.id">
+            <LobbyBroadcastCard v-if="item.source === 'broadcast'" :game="item.game" />
+            <LobbyChessDuelLiveCard v-else-if="item.source === 'chessduel'" :game="item.game" />
+          </template>
         </div>
       </section>
 
@@ -356,7 +497,7 @@ async function logOut() {
 .profile { display: flex; align-items: center; gap: 0.8rem; text-align: right; }.profile-link { display: grid; color: inherit; text-decoration: none; }.profile small, .player-row small, .online-card small { color: #8b7664; }.player-link { color: inherit; text-decoration: none; }.profile-link:hover, .player-link:hover { color: var(--brown); text-decoration: underline; }
 .avatar { display: grid; width: 46px; height: 46px; place-items: center; color: white; object-fit: cover; font-weight: 700; background: var(--brown); border-radius: 50%; }.avatar.small { width: 40px; height: 40px; }
 button { padding: 0.7rem 1rem; color: var(--ink); background: #f7eedf; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }button:hover:not(:disabled) { border-color: #b9996b; transform: translateY(-1px); }button:disabled { opacity: 0.6; cursor: default; }
-.connection { margin: 0; color: #6f855c; font-size: 0.9rem; }.connection span, .online-dot { display: inline-block; width: 8px; height: 8px; background: #668a57; border-radius: 50%; box-shadow: 0 0 8px #668a57; }
+.connection { margin: 0; color: #6f855c; font-size: 0.9rem; }.online-dot { display: inline-block; width: 7px; height: 7px; background: #668a57; border-radius: 50%; box-shadow: 0 0 7px #668a57; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 1.2rem; }.section-heading > span { color: #8b7664; font-size: 0.85rem; }.eyebrow { display: inline-block; margin-bottom: 0.5rem; padding: 0.3rem 0.6rem; color: var(--brown); background: #ead7bc; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; }
 .list { display: grid; gap: 0.75rem; }.player-row, .online-card { display: flex; align-items: center; gap: 0.9rem; padding: 1rem; background: #efe3cf; border: 1px solid var(--line); border-radius: 14px; }.player-row > div:not(.actions), .online-card > div { display: grid; }.actions, .online-card button { margin-left: auto; }.online-card button:not(:disabled) { color: #fffaf0; font-weight: 800; background: var(--brown); border-color: var(--brown); box-shadow: 0 8px 16px #6f452824; }.online-card button:not(:disabled):hover { background: #7f5130; border-color: #7f5130; }.accept { color: white; background: #67865a; }.decline { color: white; background: #bd5737; }
 .online-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }.online-card { position: relative; }.online-dot { position: absolute; top: 0.8rem; right: 0.8rem; }.empty { margin: 0; padding: 1.2rem; color: #8b7664; text-align: center; border: 1px dashed var(--line); border-radius: 12px; }.compact p { margin-bottom: 0; }.error { margin: 0; padding: 0.8rem 1rem; color: #9e3828; background: #f9ded5; border-radius: 10px; }
@@ -379,7 +520,7 @@ button { padding: 0.7rem 1rem; color: var(--ink); background: #f7eedf; border: 1
 .mode-card span { display: grid; gap: .55rem; }.mode-card strong { font-size: 1rem; }.mode-card small { color: var(--text-muted); font-size: .84rem; line-height: 1.55; }
 .panel { padding: 1.5rem; background: var(--surface); border-color: var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow); scroll-margin-top: 96px; }
 .panel h2 { color: var(--text); font-family: inherit; font-weight: 700; letter-spacing: -.02em; }.matchmaking-panel p, .private-room-panel p, .section-heading > span, .empty, .compact p, .room-waiting small, .profile small, .player-row small, .online-card small { color: var(--text-muted); }
-.eyebrow { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }.connection { color: var(--success); }.connection span, .online-dot { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.eyebrow { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }.connection { color: var(--success); }.online-dot { background: var(--success); box-shadow: 0 0 7px var(--success); }
 button { color: var(--text); background: var(--surface-strong); border-color: var(--border); }.time-control, label { color: var(--text-muted); }.time-control select, .room-link-row input { color: var(--text); background: var(--surface-strong); border-color: var(--border); }
 .search, .private-room-button, .online-card button:not(:disabled) { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); box-shadow: none; }.search:hover:not(:disabled), .private-room-button:hover:not(:disabled), .online-card button:not(:disabled):hover { color: var(--accent-ink); background: var(--accent-hover); border-color: var(--accent-hover); }
 .cancel-search, .decline { color: white; background: var(--danger); border-color: var(--danger); }.accept { color: white; background: var(--success); border-color: var(--success); }
@@ -393,11 +534,19 @@ button { color: var(--text); background: var(--surface-strong); border-color: va
 @media (max-width: 900px) { .mode-grid { grid-template-columns: repeat(2, 1fr); }.matchmaking-panel { grid-template-columns: 1fr 1fr; }.matchmaking-panel > div:first-child { grid-column: 1 / -1; }.matchmaking-panel .time-control { justify-content: stretch; }.matchmaking-panel select { flex: 1; } }
 @media (max-width: 560px) { .mode-grid { grid-template-columns: 1fr; }.mode-card { min-height: 68px; }.matchmaking-panel { grid-template-columns: 1fr; }.matchmaking-panel > div:first-child { grid-column: auto; }.live-empty { min-height: 230px; }.live-heading small { display: none; } }
 .play-bar { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; padding-bottom: .85rem; border-bottom: 1px solid var(--border-subtle); }.play-bar .connection { margin-right: auto; }.play-bar .time-control { margin: 0; }.play-bar select { min-width: 150px; padding: .72rem .85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }.play-bar button { min-height: 42px; }.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }.inline-status { display: flex; align-items: center; gap: .5rem; margin: -.7rem 0 0; color: var(--text-muted); font-size: .82rem; }.inline-status span { width: 8px; height: 8px; background: var(--success); border-radius: 50%; animation: pulse 1.2s infinite; }.live-empty { min-height: 360px; }.dashboard-grid > .panel { min-height: 270px; }
-@media (max-width: 560px) { .play-bar { align-items: stretch; flex-wrap: wrap; }.play-bar .connection { width: 100%; }.play-bar .time-control { flex: 1; }.play-bar select { width: 100%; min-width: 0; }.play-bar button { flex: 1; }.live-empty { min-height: 300px; } }
+@media (max-width: 560px) { .play-bar { align-items: stretch; flex-wrap: wrap; }.play-bar .presence-picker { width: 100%; }.play-bar .connection { width: 100%; }.play-bar .time-control { flex: 1; }.play-bar select { width: 100%; min-width: 0; }.play-bar button { flex: 1; }.live-empty { min-height: 300px; } }
 .mode-grid { gap: 1rem; padding-bottom: 1.25rem; }.mode-card { min-height: 166px; grid-template-columns: auto minmax(0, 1fr); gap: 1rem; padding: 1.35rem; box-shadow: 0 10px 25px rgb(0 0 0 / 7%); }.mode-card span { gap: .45rem; }.mode-card strong { font-size: 1rem; }.mode-card small { font-size: .8rem; line-height: 1.5; }.mode-card > svg:last-child { grid-column: 2; }.dashboard-grid > .panel { min-height: 0; }.invite-result { display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; align-items: center; gap: .7rem; margin-top: -.7rem; padding: .75rem; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 9px; font-size: .8rem; }.invite-result input { min-width: 0; padding: .6rem .7rem; color: var(--text); background: var(--surface-strong); border: 1px solid var(--border); border-radius: 7px; }.invite-result button { padding: .6rem .8rem; color: var(--text); background: var(--surface-strong); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; }
 @media (max-width: 760px) { .mode-card { min-height: 140px; }.invite-result { grid-template-columns: 1fr auto; }.invite-result > span { grid-column: 1 / -1; } }
 @media (max-width: 480px) { .invite-result { grid-template-columns: 1fr; }.invite-result > span { grid-column: auto; } }
+.presence-picker { position: relative; margin-right: auto; }.play-bar .presence-trigger { display: flex; min-height: 42px; align-items: center; gap: .55rem; margin: 0; padding: .55rem .7rem; color: var(--text); background: transparent; border-color: transparent; font-weight: 700; }.play-bar .presence-trigger:hover:not(:disabled),.play-bar .presence-trigger[aria-expanded="true"] { background: var(--surface-hover); border-color: var(--border); transform: none; }.presence-trigger:disabled { opacity: .7; }.presence-chevron { margin-left: .1rem; color: var(--text-muted); }.presence-dot { position: relative; display: inline-block; width: 7px; height: 7px; flex: 0 0 auto; background: var(--success); border-radius: 50%; box-shadow: 0 0 7px var(--success); }.presence-dot.online { width: 7px; height: 7px; background: var(--success); border-radius: 50%; box-shadow: 0 0 7px var(--success); }.presence-dot.away { background: #e7a83e; box-shadow: none; }.presence-dot.dnd { background: var(--danger); box-shadow: none; }.presence-dot.dnd::after { position: absolute; top: 2.5px; right: 1px; left: 1px; height: 2px; content: ''; background: var(--surface); border-radius: 2px; }.presence-dot.invisible { background: transparent; border: 2px solid var(--text-muted); box-shadow: none; }.presence-menu { position: absolute; z-index: 30; top: calc(100% + .45rem); left: 0; width: min(330px, calc(100vw - 2rem)); padding: .45rem; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }.presence-option { display: grid; width: 100%; grid-template-columns: 16px 1fr auto; align-items: center; gap: .75rem; padding: .7rem .75rem; color: var(--text); background: transparent; border: 0; text-align: left; }.presence-option:hover,.presence-option[aria-checked="true"] { background: var(--surface-hover); transform: none; }.presence-option .presence-dot { justify-self: center; }.presence-option > span:nth-child(2) { display: grid; gap: .18rem; }.presence-option strong { font-size: .88rem; }.presence-option small { color: var(--text-muted); font-size: .72rem; font-weight: 400; line-height: 1.35; }.presence-check { color: var(--accent); font-weight: 800; }
 .content { padding-top: clamp(1rem, 2vw, 1.6rem); gap: 1rem; }.welcome h1 { margin: 0; }.welcome p { margin: .3rem 0 0; }.mode-grid { margin-top: .25rem; }.mode-card.featured { border-color: var(--border-subtle); }.mode-card.featured:hover { border-color: var(--accent); }.play-bar { min-height: 54px; padding: .3rem 0 .55rem; }.play-bar select { padding-block: .58rem; }.play-bar button { min-height: 38px; padding-block: .55rem; }.live-games-section { gap: .55rem; }
 .play-bar .search, .play-bar .cancel-search, .play-bar .private-room-button { min-height: 36px; padding: .45rem .75rem; font-size: .82rem; }
-.mode-card { position: relative; grid-template-columns: 1fr; align-content: center; justify-items: center; gap: .75rem; padding: 1.3rem 2.2rem; text-align: center; }.mode-card span { justify-items: center; }.mode-card > svg:first-child { grid-column: 1; }.mode-card > svg:last-child { position: absolute; right: 1rem; bottom: .9rem; grid-column: auto; }
+.live-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.live-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.card-skeleton { min-height: 340px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; animation: pulse-skeleton 1.5s ease-in-out infinite; }
+@keyframes pulse-skeleton { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.25; } }
+.live-error { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.8rem; padding: 2.5rem; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; color: var(--danger); text-align: center; }
+.live-error button { padding: 0.5rem 1rem; color: var(--text); background: var(--surface-strong); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.live-error button:hover { border-color: var(--accent); }
+@media (max-width: 600px) { .live-grid, .live-loading-grid { grid-template-columns: 1fr; } }
 </style>

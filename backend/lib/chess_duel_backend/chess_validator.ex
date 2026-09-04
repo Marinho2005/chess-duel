@@ -20,6 +20,10 @@ defmodule ChessDuelBackend.ChessValidator do
     GenServer.call(__MODULE__, {:validate_move, fen, from, to, promotion}, @timeout + 1_000)
   end
 
+  def parse_pgn(pgn) when is_binary(pgn) do
+    GenServer.call(__MODULE__, {:parse_pgn, pgn}, @timeout + 1_000)
+  end
+
   @impl true
   def init(_opts) do
     with node when is_binary(node) <- System.find_executable("node"),
@@ -29,7 +33,7 @@ defmodule ChessDuelBackend.ChessValidator do
         Port.open({:spawn_executable, node}, [
           :binary,
           :exit_status,
-          {:line, 65_536},
+          {:line, 2_000_000},
           args: [script]
         ])
 
@@ -43,7 +47,9 @@ defmodule ChessDuelBackend.ChessValidator do
 
   @impl true
   def handle_call({:validate_move, fen, from, to, promotion}, _from, %{port: port} = state) do
-    request = Jason.encode!(%{fen: fen, from: from, to: to, promotion: promotion})
+    request =
+      Jason.encode!(%{action: "validate_move", fen: fen, from: from, to: to, promotion: promotion})
+
     true = Port.command(port, request <> "\n")
 
     case await_response(port) do
@@ -52,6 +58,21 @@ defmodule ChessDuelBackend.ChessValidator do
 
       reply ->
         {:reply, reply, state}
+    end
+  end
+
+  def handle_call({:parse_pgn, pgn}, _from, %{port: port} = state) do
+    true = Port.command(port, Jason.encode!(%{action: "parse_pgn", pgn: pgn}) <> "\n")
+
+    case await_response(port) do
+      {:port_exit, status} ->
+        {:stop, {:validator_exit, status}, {:error, :validator_unavailable}, state}
+
+      {:ok, %{"games" => games}} ->
+        {:reply, {:ok, games}, state}
+
+      _ ->
+        {:reply, {:error, :invalid_pgn}, state}
     end
   end
 
@@ -72,6 +93,9 @@ defmodule ChessDuelBackend.ChessValidator do
 
   defp decode_response(line) do
     case Jason.decode(line) do
+      {:ok, %{"ok" => true} = result} ->
+        {:ok, result}
+
       {:ok, %{"valid" => true} = result} ->
         {:ok,
          %{

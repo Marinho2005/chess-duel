@@ -22,4 +22,6 @@ COPY . .
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "mix ecto.create && mix ecto.migrate && exec mix phx.server"]
+# O volume /app/deps acelera reinicios, mas pode sobreviver a um rebuild com
+# mix.lock novo. Sincronizamos o volume antes de iniciar para evitar lock mismatch.
+CMD ["sh", "-c", "mix deps.get && mix deps.compile && mix ecto.create && mix ecto.migrate && exec mix phx.server"]

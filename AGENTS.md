@@ -142,7 +142,7 @@ develop estável -> Pull Request -> main
 
 - [ ] **6.1 Torneios** — Sistema de inscrição, chaveamento, ranking de torneio.
 - [ ] **6.2 Clubes e chat** — Comunidades dentro da plataforma.
-- [ ] **6.3 Espectadores/streaming** — Assistir partidas ao vivo de outros jogadores.
+- [~] **6.3 Espectadores/streaming** — Broadcasts profissionais do Lichess podem ser assistidos em tempo real dentro do ChessDuel e partidas humanas ativas aparecem como previews no lobby; espectação completa das partidas internas continua pendente.
 - [ ] **6.4 Multi-região** — Escala geográfica, quando o volume de usuários justificar.
 
 ### Fora do roadmap numerado, mas necessária em algum momento

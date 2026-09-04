@@ -1,5 +1,9 @@
 import Config
 
+if config_env() != :test do
+  config :chess_duel_backend, :lichess_broadcasts, token: System.get_env("LICHESS_API_TOKEN")
+end
+
 config :chess_duel_backend,
        :frontend_url,
        System.get_env("FRONTEND_URL", "http://localhost:3000")

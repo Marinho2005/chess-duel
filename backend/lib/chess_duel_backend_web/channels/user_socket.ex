@@ -11,6 +11,7 @@ defmodule ChessDuelBackendWeb.UserSocket do
   channel "private_rooms:*", ChessDuelBackendWeb.PrivateRoomChannel
   channel "puzzle_battle:queue:*", ChessDuelBackendWeb.PuzzleBattleQueueChannel
   channel "puzzle_battle:*", ChessDuelBackendWeb.PuzzleBattleChannel
+  channel "broadcast_watch:*", ChessDuelBackendWeb.BroadcastWatchChannel
 
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do
