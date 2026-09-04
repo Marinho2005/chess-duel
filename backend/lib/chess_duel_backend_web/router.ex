@@ -33,6 +33,8 @@ defmodule ChessDuelBackendWeb.Router do
     get "/ranking", UserController, :ranking
     get "/games/live", LiveGameController, :index
     get "/broadcasts/live", BroadcastController, :index
+    get "/broadcasts/tournaments", BroadcastController, :tournaments
+    get "/broadcasts/tournaments/:tournament_id/games", BroadcastController, :tournament_games
   end
 
   scope "/api", ChessDuelBackendWeb do

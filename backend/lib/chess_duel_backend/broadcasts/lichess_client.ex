@@ -33,7 +33,7 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
          true <- valid_round?(round_data),
          {:ok, pgn} <- get(http, pgn_path, "application/x-chess-pgn"),
          {:ok, parsed_games} <- ChessValidator.parse_pgn(pgn) do
-      {:ok, normalize_round(round_data, parsed_games)}
+      {:ok, normalize_round(round_data, parsed_games, tour)}
     else
       false -> {:error, :invalid_response}
       {:error, %Jason.DecodeError{}} -> {:error, :invalid_response}
@@ -41,7 +41,11 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
     end
   end
 
-  defp normalize_round(%{"tour" => tour, "round" => round, "games" => games}, parsed_games) do
+  defp normalize_round(
+         %{"tour" => tour, "round" => round, "games" => games},
+         parsed_games,
+         source_tour
+       ) do
     parsed_by_id =
       Map.new(parsed_games, fn parsed ->
         {parsed |> get_in(["headers", "GameURL"]) |> game_id_from_url(), parsed}
@@ -54,20 +58,22 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
            %{} = parsed <- parsed_by_id[id],
            [white, black | _] <- game["players"] do
         moves = parsed["moves"] || []
-        [normalize_game(id, tour, round, game, white, black, parsed, moves)]
+        [normalize_game(id, tour, round, game, white, black, parsed, moves, source_tour)]
       else
         _ -> []
       end
     end)
   end
 
-  defp normalize_game(id, tour, round, game, white, black, parsed, moves) do
+  defp normalize_game(id, tour, round, game, white, black, parsed, moves, source_tour) do
     headers = parsed["headers"] || %{}
     last_move = List.last(moves)
 
     %{
       game_id: id,
+      tournament_id: source_tour["id"] || source_tour["slug"] || slugify(tour["name"]),
       tournament: tour["name"],
+      tournament_image: source_tour["image"] || tour["image"],
       round: round["name"],
       white: player(white, headers, "White"),
       black: player(black, headers, "Black"),
@@ -76,6 +82,14 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
       moves: moves,
       lichess_url: headers["GameURL"] || "#{round["url"]}/#{id}"
     }
+  end
+
+  defp slugify(value) when is_binary(value) do
+    value
+    |> String.downcase()
+    |> String.normalize(:nfd)
+    |> String.replace(~r/[^a-z0-9]+/u, "-")
+    |> String.trim("-")
   end
 
   defp player(player, headers, color) do

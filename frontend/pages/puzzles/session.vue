@@ -309,7 +309,7 @@ function resetSessionState() {
         <div v-if="rushCountdown" class="rush-countdown" aria-live="assertive"><span>Prepare-se</span><strong>{{ rushCountdown }}</strong></div>
         <div class="board-stage" :class="{ blurred: rushCountdown > 0 }">
           <div v-if="loading" class="board-placeholder">Preparando a posição…</div>
-          <GameBoard v-else-if="puzzle" :fen="boardFen" :orientation="orientation" :turn-color="turnColor" :last-move="lastMove" :check="inCheck" :disabled="boardDisabled" @move="handleMove" />
+          <GameBoard v-else-if="puzzle" :fen="boardFen" :orientation="orientation" :turn-color="turnColor" :last-move="lastMove" :check="inCheck" :disabled="boardDisabled" :animation-duration="mode === 'rush' ? 0 : 180" @move="handleMove" />
           <div v-else class="board-placeholder error">Nenhum problema carregado.</div>
         </div>
       </div>

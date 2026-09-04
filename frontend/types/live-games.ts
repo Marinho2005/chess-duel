@@ -7,7 +7,9 @@ export type BroadcastPlayer = {
 }
 export type BroadcastLiveGame = {
   game_id: string
+  tournament_id: string
   tournament: string
+  tournament_image?: string | null
   round: string
   white: BroadcastPlayer
   black: BroadcastPlayer
@@ -21,9 +23,12 @@ export type ChessDuelLivePlayer = {
   nickname: string
   rating: number
   country_code?: string | null
+  avatar_url?: string | null
+  status: 'online' | 'offline' | 'away' | 'dnd'
 }
 export type ChessDuelLiveGame = {
   game_id: string
+  category: 'bullet' | 'blitz' | 'blitz_increment' | 'rapid'
   white: ChessDuelLivePlayer
   black: ChessDuelLivePlayer
   fen: string
@@ -42,6 +47,8 @@ export type LiveGame =
 export type BroadcastGame = BroadcastLiveGame
 export type BroadcastsApiResponse = { games: BroadcastGame[] }
 export type ChessDuelLiveApiResponse = { games: ChessDuelLiveGame[] }
+export type BroadcastTournament = { tournament_id: string; name: string; image_url: string | null; live_games: number }
+export type BroadcastTournamentsApiResponse = { tournaments: BroadcastTournament[] }
 export type LiveFeedItem =
   | { id: string; source: 'broadcast'; game: BroadcastGame }
   | { id: string; source: 'chessduel'; game: ChessDuelLiveGame }

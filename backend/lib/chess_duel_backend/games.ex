@@ -34,10 +34,15 @@ defmodule ChessDuelBackend.Games do
     |> Repo.update()
   end
 
-  def list_live_human_games do
+  def list_live_human_games(opts \\ []) do
+    category_filter = Keyword.get(opts, :category)
+    limit = opts |> Keyword.get(:limit, 30) |> max(1) |> min(30)
+
     states =
       GameServer.list_active_states()
       |> Enum.filter(&live_human?/1)
+      |> Enum.filter(&(is_nil(category_filter) or live_category(&1) == category_filter))
+      |> Enum.take(limit)
 
     player_ids = states |> Enum.flat_map(&[&1.white_player_id, &1.black_player_id]) |> Enum.uniq()
     users = from(user in User, where: user.id in ^player_ids) |> Repo.all() |> Map.new(&{&1.id, &1})
@@ -54,8 +59,9 @@ defmodule ChessDuelBackend.Games do
         [
           %{
             game_id: state.game_id,
-            white: live_player(white, category),
-            black: live_player(black, category),
+            category: live_category(state),
+            white: live_player(white, category, state),
+            black: live_player(black, category, state),
             fen: state.fen,
             current_turn: state.current_turn,
             white_time_remaining_ms: state.white_time_remaining_ms,
@@ -70,18 +76,46 @@ defmodule ChessDuelBackend.Games do
     end)
   end
 
+  defp live_category(%{initial_time_ms: 60_000, increment_ms: 0}), do: "bullet"
+  defp live_category(%{initial_time_ms: 180_000, increment_ms: 0}), do: "blitz"
+  defp live_category(%{initial_time_ms: 300_000}), do: "blitz_increment"
+  defp live_category(%{initial_time_ms: 600_000, increment_ms: 0}), do: "rapid"
+  defp live_category(_), do: "blitz"
+
   defp live_human?(state) do
     state.status == "in_progress" and state.game_type == :registered and
       is_binary(state.white_player_id) and
       is_binary(state.black_player_id) and is_nil(state.bot_id)
   end
 
-  defp live_player(user, category),
+  def player_status(user_id) when is_binary(user_id) do
+    case ChessDuelBackend.Games.Lobby.presence_status(user_id) do
+      status when status in ~w(online away dnd) -> status
+      _ -> if connected_to_active_game?(user_id), do: "online", else: "offline"
+    end
+  catch
+    :exit, _ -> if connected_to_active_game?(user_id), do: "online", else: "offline"
+  end
+
+  defp connected_to_active_game?(user_id) do
+    GameServer.list_active_states()
+    |> Enum.any?(fn state ->
+      state.status == "in_progress" and Map.get(state.connected_player_counts, user_id, 0) > 0
+    end)
+  end
+
+  defp live_player(user, category, state),
     do: %{
       id: user.id,
       nickname: user.nickname,
       rating: User.rating_for(user, category),
-      country_code: user.country_code
+      country_code: user.country_code,
+      avatar_url: user.avatar_path,
+      status:
+        if(Map.get(state.connected_player_counts, user.id, 0) > 0,
+          do: "online",
+          else: "offline"
+        )
     }
 
   def list_finished_games_for_user(user_id, opts \\ []) when is_binary(user_id) do

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bot, Crown, LogOut, Puzzle, Settings, Swords, Trophy } from 'lucide-vue-next'
+import { Bot, Crown, Eye, LogOut, Puzzle, Settings, Swords, Trophy } from 'lucide-vue-next'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -9,6 +9,7 @@ const items = [
   { key: 'ranking', label: 'Ranking', to: '/ranking', icon: Trophy },
   { key: 'puzzles', label: 'Problemas', to: '/puzzles', icon: Puzzle },
   { key: 'bots', label: 'Bots', to: '/bots', icon: Bot },
+  { key: 'watch', label: 'Observar', to: '/observar', icon: Eye },
   { key: 'profile', label: 'Editar perfil', to: '/settings/profile', icon: Settings }
 ]
 

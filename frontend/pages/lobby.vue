@@ -2,7 +2,6 @@
 import { Socket, type Channel } from 'phoenix'
 import { ArrowRight, Brain, Eye, Flame, Monitor, Puzzle, Swords, Trophy } from 'lucide-vue-next'
 import type { BroadcastGame, ChessDuelLiveGame, BroadcastsApiResponse, ChessDuelLiveApiResponse } from '~/types/live-games'
-import { combineLiveFeed } from '~/utils/liveGames'
 import LobbyBroadcastCard from '~/components/live/BroadcastLiveCard.vue'
 import LobbyChessDuelLiveCard from '~/components/live/ChessDuelLiveCard.vue'
 
@@ -38,8 +37,6 @@ const presenceOptions: Array<{ id: PresenceStatus; label: string; description: s
   { id: 'dnd', label: 'Não perturbar', description: 'Você não receberá novos desafios.' },
   { id: 'invisible', label: 'Invisível', description: 'Você aparecerá offline.' }
 ]
-const presenceStorageKey = 'chess-duel:presence'
-
 const auth = useAuthStore()
 const users = ref<LobbyUser[]>([])
 const challenges = ref<Challenge[]>([])
@@ -59,13 +56,14 @@ const broadcasts = ref<BroadcastGame[]>([])
 const chessDuelGames = ref<ChessDuelLiveGame[]>([])
 const liveGamesLoading = ref(true)
 const liveGamesError = ref('')
-const presence = ref<PresenceStatus>('online')
+const liveSource = ref<'broadcast' | 'chessduel'>('broadcast')
+const presence = computed(() => auth.presence)
 const presenceOpen = ref(false)
 const presencePicker = ref<HTMLElement | null>(null)
 const connectionReady = ref(false)
 let liveGamesPollingTimer: ReturnType<typeof setInterval> | null = null
 
-const liveFeedItems = computed(() => combineLiveFeed(broadcasts.value, chessDuelGames.value))
+const visibleLiveGames = computed(() => liveSource.value === 'broadcast' ? broadcasts.value : chessDuelGames.value)
 const selectedPresence = computed(() => presenceOptions.find(option => option.id === presence.value) || presenceOptions[0]!)
 
 let socket: Socket | null = null
@@ -90,8 +88,6 @@ const resultLabels: Record<RecentGame['result'], string> = {
 
 onMounted(async () => {
   auth.restoreSession()
-  const savedPresence = localStorage.getItem(presenceStorageKey)
-  if (presenceOptions.some(option => option.id === savedPresence)) presence.value = savedPresence as PresenceStatus
   document.addEventListener('pointerdown', closePresenceMenu)
 
   if (!auth.token || !(await auth.fetchCurrentUser())) {
@@ -240,9 +236,8 @@ function applyLobbyState(state: LobbyState) {
 }
 
 function selectPresence(nextPresence: PresenceStatus) {
-  presence.value = nextPresence
+  auth.setPresence(nextPresence)
   presenceOpen.value = false
-  localStorage.setItem(presenceStorageKey, nextPresence)
   if (connectionReady.value) status.value = selectedPresence.value.label
 
   channel?.push('set_presence', { status: nextPresence })
@@ -355,10 +350,10 @@ async function logOut() {
     <div class="content">
       <header class="welcome" id="dashboard"><h1>Como você quer jogar?</h1><p>Escolha seu modo de jogo e comece um novo duelo.</p></header>
       <section class="mode-grid" aria-label="Modos de jogo">
-        <a class="mode-card featured" href="#matchmaking"><Swords :size="34" aria-hidden="true" /><span><strong>Buscar partida</strong><small>Encontre um adversário online e jogue agora.</small></span><ArrowRight :size="19" aria-hidden="true" /></a>
+        <NuxtLink class="mode-card featured" to="/play"><Swords :size="34" aria-hidden="true" /><span><strong>Buscar partida</strong><small>Encontre um adversário online e jogue agora.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
         <NuxtLink class="mode-card" to="/bots"><Monitor :size="34" aria-hidden="true" /><span><strong>Jogar contra computador</strong><small>Desafie nossos bots em diversos níveis.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
         <NuxtLink class="mode-card" to="/puzzles"><Puzzle :size="34" aria-hidden="true" /><span><strong>Problemas</strong><small>Resolva problemas e melhore seu raciocínio tático.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
-        <a class="mode-card" href="#live-games"><Eye :size="34" aria-hidden="true" /><span><strong>Observar</strong><small>Acompanhe partidas ao vivo.</small></span><ArrowRight :size="19" aria-hidden="true" /></a>
+        <NuxtLink class="mode-card" to="/observar"><Eye :size="34" aria-hidden="true" /><span><strong>Observar</strong><small>Acompanhe partidas ao vivo.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
       </section>
 
       <section id="matchmaking" class="play-bar" aria-label="Buscar partida">
@@ -406,33 +401,37 @@ async function logOut() {
 
       <section id="live-games" class="live-games-section" aria-labelledby="live-title">
         <header class="live-heading">
-          <p>
-            <span aria-hidden="true" />
+          <p class="live-section-badge">
+            <span aria-hidden="true">●</span>
             <strong id="live-title">Partidas ao vivo</strong>
           </p>
           <small>Atualização a cada 20s</small>
         </header>
 
-        <div v-if="liveGamesLoading && !liveFeedItems.length" class="live-loading-grid" aria-label="Carregando partidas ao vivo">
+        <div class="live-source-tabs" role="tablist" aria-label="Origem das partidas">
+          <button type="button" role="tab" :aria-selected="liveSource === 'broadcast'" :class="{ active: liveSource === 'broadcast' }" @click="liveSource = 'broadcast'">Torneios</button>
+          <button type="button" role="tab" :aria-selected="liveSource === 'chessduel'" :class="{ active: liveSource === 'chessduel' }" @click="liveSource = 'chessduel'">ChessDuel</button>
+          <NuxtLink to="/observar">Ver página completa</NuxtLink>
+        </div>
+
+        <div v-if="liveGamesLoading && !visibleLiveGames.length" class="live-loading-grid" aria-label="Carregando partidas ao vivo">
           <div v-for="i in 4" :key="i" class="card-skeleton" />
         </div>
 
-        <div v-else-if="liveGamesError && !liveFeedItems.length" class="live-error">
+        <div v-else-if="liveGamesError && !visibleLiveGames.length" class="live-error">
           <p>{{ liveGamesError }}</p>
           <button type="button" @click="fetchLiveGames(true)">Tentar novamente</button>
         </div>
 
-        <div v-else-if="!liveFeedItems.length" class="live-empty">
+        <div v-else-if="!visibleLiveGames.length" class="live-empty">
           <Eye :size="42" aria-hidden="true" />
           <strong>Nenhuma partida ao vivo no momento.</strong>
-          <p>Quando houver torneios oficiais em andamento ou jogadores em duelo no ChessDuel, as partidas aparecerão aqui automaticamente.</p>
+          <p>{{ liveSource === 'broadcast' ? 'Quando houver torneios oficiais em andamento, as partidas aparecerão aqui automaticamente.' : 'Quando jogadores iniciarem um duelo no ChessDuel, as partidas aparecerão aqui automaticamente.' }}</p>
         </div>
 
         <div v-else class="live-grid">
-          <template v-for="item in liveFeedItems" :key="item.id">
-            <LobbyBroadcastCard v-if="item.source === 'broadcast'" :game="item.game" />
-            <LobbyChessDuelLiveCard v-else-if="item.source === 'chessduel'" :game="item.game" />
-          </template>
+          <LobbyBroadcastCard v-for="game in liveSource === 'broadcast' ? broadcasts.slice(0, 4) : []" :key="game.game_id" :game="game" />
+          <LobbyChessDuelLiveCard v-for="game in liveSource === 'chessduel' ? chessDuelGames.slice(0, 4) : []" :key="game.game_id" :game="game" />
         </div>
       </section>
 
@@ -443,8 +442,7 @@ async function logOut() {
         </div>
         <div v-if="receivedChallenges.length" class="list">
           <article v-for="item in receivedChallenges" :key="item.id" class="player-row">
-            <img v-if="avatarUrl(item.challenger)" class="avatar small" :src="avatarUrl(item.challenger) || ''" :alt="`Foto de ${item.challenger.nickname}`">
-            <span v-else class="avatar small">{{ item.challenger.nickname.charAt(0).toUpperCase() }}</span>
+            <ProfilePresenceAvatar :name="item.challenger.nickname" :avatar-url="item.challenger.avatar_url" :status="item.challenger.status" :size="40" />
             <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(item.challenger.nickname)}`"><strong>{{ item.challenger.nickname }}</strong></NuxtLink><small>Rating {{ item.challenger.rating }} · {{ item.time_control.label }}</small></div>
             <div class="actions"><button class="accept" :disabled="searchingMatch" @click="accept(item.id)">Aceitar</button><button class="decline" @click="decline(item.id)">Recusar</button></div>
           </article>
@@ -542,6 +540,7 @@ button { color: var(--text); background: var(--surface-strong); border-color: va
 .content { padding-top: clamp(1rem, 2vw, 1.6rem); gap: 1rem; }.welcome h1 { margin: 0; }.welcome p { margin: .3rem 0 0; }.mode-grid { margin-top: .25rem; }.mode-card.featured { border-color: var(--border-subtle); }.mode-card.featured:hover { border-color: var(--accent); }.play-bar { min-height: 54px; padding: .3rem 0 .55rem; }.play-bar select { padding-block: .58rem; }.play-bar button { min-height: 38px; padding-block: .55rem; }.live-games-section { gap: .55rem; }
 .play-bar .search, .play-bar .cancel-search, .play-bar .private-room-button { min-height: 36px; padding: .45rem .75rem; font-size: .82rem; }
 .live-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.live-source-tabs { display: flex; align-items: center; gap: .45rem; }.live-source-tabs button { padding: .48rem .78rem; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 999px; }.live-source-tabs button.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }.live-source-tabs a { margin-left: auto; color: var(--accent); font-size: .82rem; font-weight: 700; text-decoration: none; }.live-source-tabs a:hover { color: var(--accent-hover); text-decoration: underline; }
 .live-loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
 .card-skeleton { min-height: 340px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; animation: pulse-skeleton 1.5s ease-in-out infinite; }
 @keyframes pulse-skeleton { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.25; } }
@@ -549,4 +548,7 @@ button { color: var(--text); background: var(--surface-strong); border-color: va
 .live-error button { padding: 0.5rem 1rem; color: var(--text); background: var(--surface-strong); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
 .live-error button:hover { border-color: var(--accent); }
 @media (max-width: 600px) { .live-grid, .live-loading-grid { grid-template-columns: 1fr; } }
+.live-heading .live-section-badge { width: max-content; gap: .3rem; padding: .28rem .5rem; color: var(--danger); background: var(--danger-soft); border-radius: 999px; font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.live-heading .live-section-badge > span { width: auto; height: auto; color: var(--danger); background: transparent; border-radius: 0; box-shadow: none; font-size: .62rem; line-height: 1; }
+.live-heading .live-section-badge > strong { color: var(--danger); font-size: inherit; }
 </style>

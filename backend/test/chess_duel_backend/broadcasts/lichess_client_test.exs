@@ -23,6 +23,8 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
   test "normalizes official round JSON and PGN into the stable contract" do
     assert {:ok, [game]} = LichessClient.fetch_live_games(http_client: FakeHTTP)
     assert game.game_id == "AbCd1234"
+    assert game.tournament_id == "example-open"
+    assert game.tournament_image == "https://lichess1.org/broadcast/example.webp"
     assert game.tournament == "Example Open"
     assert game.round == "Round 3"
     assert game.white == %{name: "White Player", title: "GM", rating: 2640, country_code: "BRA"}
@@ -50,7 +52,11 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
 
   defp official_ndjson do
     Jason.encode!(%{
-      "tour" => %{"name" => "Example Open", "slug" => "example-open"},
+      "tour" => %{
+        "name" => "Example Open",
+        "slug" => "example-open",
+        "image" => "https://lichess1.org/broadcast/example.webp"
+      },
       "rounds" => [
         %{"id" => "round123", "name" => "Round 3", "slug" => "round-3", "ongoing" => true}
       ]
