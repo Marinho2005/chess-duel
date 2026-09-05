@@ -55,6 +55,7 @@ defmodule ChessDuelBackend.Games.LobbyTest do
 
     assert {:ok, %{users: users}} = Lobby.set_presence(other.id, "away")
     assert Enum.find(users, &(&1.id == other.id)).status == "away"
+    assert Lobby.presence_status(other.id) == "away"
 
     assert {:ok, %{users: users}} = Lobby.set_presence(other.id, "dnd")
     assert Enum.find(users, &(&1.id == other.id)).status == "dnd"
@@ -62,6 +63,7 @@ defmodule ChessDuelBackend.Games.LobbyTest do
 
     assert {:ok, %{users: users}} = Lobby.set_presence(other.id, "invisible")
     refute Enum.any?(users, &(&1.id == other.id))
+    assert Lobby.presence_status(other.id) == "offline"
 
     assert {:error, :invalid_presence} = Lobby.set_presence(other.id, "busy-ish")
 

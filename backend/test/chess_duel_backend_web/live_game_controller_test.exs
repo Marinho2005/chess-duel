@@ -30,12 +30,37 @@ defmodule ChessDuelBackendWeb.LiveGameControllerTest do
     assert is_integer(game["black_time_remaining_ms"])
     assert game["initial_time_ms"] == 180_000
     assert game["increment_ms"] == 0
+    assert game["category"] == "blitz"
     assert game["white"]["nickname"] == white.nickname
     assert game["black"]["nickname"] == black.nickname
+    assert game["white"]["status"] == "offline"
+    assert Map.has_key?(game["white"], "avatar_url")
     assert Map.has_key?(game["white"], "country_code")
 
     Process.sleep(150)
     Enum.each([active_id, finished_id, bot_id], &cleanup/1)
+  end
+
+  test "GET /api/games/live filters categories and rejects unknown values", %{conn: conn} do
+    white = user("filter-white")
+    black = user("filter-black")
+    bullet_id = "bullet-live-#{System.unique_integer([:positive])}"
+    blitz_id = "blitz-live-#{System.unique_integer([:positive])}"
+    bullet = %{id: "bullet_1_0", label: "Bullet 1+0", initial_time_ms: 60_000, increment_ms: 0}
+
+    assert {:ok, _} = GameServer.reserve_players(bullet_id, white.id, black.id, bullet)
+    assert {:ok, _} = GameServer.reserve_players(blitz_id, white.id, black.id)
+    wait_until_started(bullet_id)
+    wait_until_started(blitz_id)
+
+    response = conn |> get("/api/games/live?category=bullet") |> json_response(200)
+    assert [%{"game_id" => ^bullet_id, "category" => "bullet"}] = response["games"]
+    refute Enum.any?(response["games"], &(&1["game_id"] == blitz_id))
+
+    assert %{"error" => "invalid_category"} =
+             conn |> recycle() |> get("/api/games/live?category=classical") |> json_response(400)
+
+    Enum.each([bullet_id, blitz_id], &cleanup/1)
   end
 
   defp user(prefix) do

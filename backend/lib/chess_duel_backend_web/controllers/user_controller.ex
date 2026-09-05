@@ -22,7 +22,12 @@ defmodule ChessDuelBackendWeb.UserController do
         recent = Games.list_finished_games_for_user(user.id, page: 1, per_page: 5)
 
         json(conn, %{
-          profile: UserJSON.public_data(user, %{stats: stats, recent_games: recent.games})
+          profile:
+            UserJSON.public_data(user, %{
+              stats: stats,
+              recent_games: recent.games,
+              status: Games.player_status(user.id)
+            })
         })
     end
   end
@@ -38,7 +43,10 @@ defmodule ChessDuelBackendWeb.UserController do
         ranking.users
         |> Enum.with_index((ranking.page - 1) * ranking.page_size + 1)
         |> Enum.map(fn {user, position} ->
-          user |> UserJSON.ranking_data(category) |> Map.put(:position, position)
+          user
+          |> UserJSON.ranking_data(category)
+          |> Map.put(:position, position)
+          |> Map.put(:status, Games.player_status(user.id))
         end),
       pagination: Map.drop(ranking, [:users])
     })

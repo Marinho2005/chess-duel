@@ -142,7 +142,7 @@ develop estável -> Pull Request -> main
 
 - [ ] **6.1 Torneios** — Sistema de inscrição, chaveamento, ranking de torneio.
 - [ ] **6.2 Clubes e chat** — Comunidades dentro da plataforma.
-- [~] **6.3 Espectadores/streaming** — Broadcasts profissionais do Lichess podem ser assistidos em tempo real dentro do ChessDuel e partidas humanas ativas aparecem como previews no lobby; espectação completa das partidas internas continua pendente.
+- [~] **6.3 Espectadores/streaming** — Broadcasts profissionais do Lichess podem ser assistidos em tempo real dentro do ChessDuel; a página `/observar` agrupa os broadcasts ativos por torneio, exibe suas imagens oficiais, lista até 30 partidas por torneio e permite filtrar os previews de partidas humanas por Bullet, Blitz 3+0, Blitz 5+0 e Rapid. Os avatares indicam presença no canto inferior direito, e o lobby alterna entre os dois feeds. Espectação completa das partidas internas continua pendente.
 - [ ] **6.4 Multi-região** — Escala geográfica, quando o volume de usuários justificar.
 
 ### Fora do roadmap numerado, mas necessária em algum momento
@@ -157,6 +157,13 @@ develop estável -> Pull Request -> main
 ---
 
 ## Como trabalhar neste projeto
+
+### API e rotas de observação
+
+- `GET /api/broadcasts/tournaments` lista os broadcasts ativos agrupados por torneio, com identificador, nome, imagem oficial e quantidade de partidas ao vivo.
+- `GET /api/broadcasts/tournaments/:tournament_id/games` lista até 30 partidas ao vivo exclusivamente do torneio informado.
+- `GET /api/games/live` aceita o filtro opcional `category=bullet|blitz|blitz_increment|rapid`; `blitz_increment` identifica o segundo controle Blitz atualmente configurado como 5+0.
+- `/observar` oferece as abas Torneios e ChessDuel; `/observar/torneio/:tournamentId` abre as partidas agrupadas e reutiliza `/watch/broadcast/:gameId` para a espectação em tempo real.
 
 1. Sempre ler este arquivo por completo antes de iniciar uma tarefa nova, para entender em qual etapa do roadmap ela se encaixa e quais decisões anteriores precisam ser respeitadas
 2. Seguir rigorosamente o escopo definido no prompt de cada tarefa — não expandir escopo por conta própria (ex: não adicionar autenticação "de brinde" numa tarefa que não pediu isso, mesmo que pareça relacionado)

@@ -10,8 +10,8 @@ const source = (path: string) => readFileSync(`${root}/${path}`, 'utf8')
 describe('contratos de partidas ao vivo', () => {
   it('mantém os dois formatos em uma união discriminada', () => {
     const games: LiveGame[] = [
-      { source: 'broadcast', game: { game_id: 'a', tournament: 'Open', round: 'R1', white: { name: 'W', title: 'GM', rating: 2500 }, black: { name: 'B', title: null, rating: null }, fen: 'fen', last_move: null, moves: [], lichess_url: 'https://lichess.org/a' } },
-      { source: 'chessduel', game: { game_id: 'b', white: { id: 'w', nickname: 'W', rating: 1200 }, black: { id: 'b', nickname: 'B', rating: 1200 }, fen: 'fen', current_turn: 'white', white_time_remaining_ms: 176420, black_time_remaining_ms: 178913, initial_time_ms: 180000, increment_ms: 0 } },
+      { source: 'broadcast', game: { game_id: 'a', tournament_id: 'open', tournament: 'Open', round: 'R1', white: { name: 'W', title: 'GM', rating: 2500 }, black: { name: 'B', title: null, rating: null }, fen: 'fen', last_move: null, moves: [], lichess_url: 'https://lichess.org/a' } },
+      { source: 'chessduel', game: { game_id: 'b', category: 'blitz', white: { id: 'w', nickname: 'W', rating: 1200, status: 'online' }, black: { id: 'b', nickname: 'B', rating: 1200, status: 'offline' }, fen: 'fen', current_turn: 'white', white_time_remaining_ms: 176420, black_time_remaining_ms: 178913, initial_time_ms: 180000, increment_ms: 0 } },
     ]
     expect(games.map(game => game.source)).toEqual(['broadcast', 'chessduel'])
   })
@@ -82,5 +82,19 @@ describe('integração da UI ao vivo', () => {
     expect(themes).toContain(":root[data-theme='black']")
     expect(themes).toContain(":root[data-theme='navy']")
     expect(lobby).toContain('background: var(--surface)')
+  })
+
+  it('oferece página dedicada, agrupamento por torneio e filtro ChessDuel', () => {
+    const watch = source('pages/observar/index.vue')
+    const tournament = source('pages/observar/torneio/[tournamentId].vue')
+    expect(watch).toContain('/api/broadcasts/tournaments')
+    expect(watch).toContain('category: category.value')
+    expect(watch).toContain('blitz_increment')
+    expect(tournament).toContain('/api/broadcasts/tournaments/${encodeURIComponent(tournamentId.value)}/games')
+    expect(watch).toContain('tournament.image_url')
+    expect(tournament).toContain('tournament_image')
+    const presenceAvatar = source('components/profile/PresenceAvatar.vue')
+    expect(presenceAvatar).toContain('bottom: 0')
+    expect(presenceAvatar).toContain('box-sizing: border-box')
   })
 })

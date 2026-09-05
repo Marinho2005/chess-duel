@@ -16,6 +16,8 @@ defmodule ChessDuelBackend.Games.Lobby do
   def set_presence(user_id, presence_status),
     do: GenServer.call(__MODULE__, {:set_presence, user_id, presence_status})
 
+  def presence_status(user_id), do: GenServer.call(__MODULE__, {:presence_status, user_id})
+
   def create_challenge(challenger_id, challenged_id, time_control_id \\ TimeControl.default().id),
     do:
       GenServer.call(
@@ -68,6 +70,11 @@ defmodule ChessDuelBackend.Games.Lobby do
 
   def handle_call({:set_presence, _user_id, _presence_status}, _from, state),
     do: {:reply, {:error, :invalid_presence}, state}
+
+  def handle_call({:presence_status, user_id}, _from, state) do
+    status = state.users |> Map.get(user_id, %{status: "offline"}) |> Map.fetch!(:status)
+    {:reply, if(status == "invisible", do: "offline", else: status), state}
+  end
 
   def handle_call({:disconnect, user_id}, _from, state) do
     {users, disconnected?} = decrement_user(state.users, user_id)

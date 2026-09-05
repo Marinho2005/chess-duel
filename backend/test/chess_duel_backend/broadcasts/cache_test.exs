@@ -32,9 +32,35 @@ defmodule ChessDuelBackend.Broadcasts.CacheTest do
     assert [] = Cache.list_games(cache)
   end
 
+  test "groups live games by tournament without mixing them" do
+    open = game("open-fen", [])
+
+    masters = %{
+      game("masters-fen", [])
+      | game_id: "game-2",
+        tournament_id: "masters",
+        tournament: "Masters"
+    }
+
+    client = fn -> {:ok, [open, masters]} end
+    {:ok, cache} = start_supervised({Cache, name: nil, client: client, auto_refresh: false})
+
+    assert :ok = Cache.refresh(cache)
+
+    assert [
+             %{tournament_id: "masters", name: "Masters", image_url: nil, live_games: 1},
+             %{tournament_id: "open", name: "Open", image_url: nil, live_games: 1}
+           ] = Cache.list_tournaments(cache)
+
+    assert [%{game_id: "game-1"}] = Cache.list_tournament_games("open", cache)
+    assert [%{game_id: "game-2"}] = Cache.list_tournament_games("masters", cache)
+    assert [] = Cache.list_tournament_games("missing", cache)
+  end
+
   defp game(fen, moves),
     do: %{
       game_id: "game-1",
+      tournament_id: "open",
       tournament: "Open",
       round: "R1",
       white: %{},

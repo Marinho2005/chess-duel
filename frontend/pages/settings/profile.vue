@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { countries, countryName } from '~/utils/countries'
+import { AVATAR_OUTPUT_SIZE, normalizeAvatarImage } from '~/utils/avatarImage'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -10,6 +11,8 @@ const saving = ref(false)
 const saved = ref(false)
 const selectedAvatar = ref<File | null>(null)
 const previewUrl = ref<string | null>(null)
+const processingAvatar = ref(false)
+const avatarError = ref('')
 const config = useRuntimeConfig()
 const countryPicker = ref<HTMLElement | null>(null)
 const countryOpen = ref(false)
@@ -55,12 +58,33 @@ async function save() {
   }
 }
 
-function selectAvatar(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0] || null
-  selectedAvatar.value = file
+async function selectAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] || null
+  selectedAvatar.value = null
   clearPreview()
+  avatarError.value = ''
 
-  if (file) previewUrl.value = URL.createObjectURL(file)
+  if (!file) return
+
+  processingAvatar.value = true
+
+  try {
+    const normalizedAvatar = await normalizeAvatarImage(file)
+    selectedAvatar.value = normalizedAvatar
+    previewUrl.value = URL.createObjectURL(normalizedAvatar)
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'avatar_processing_failed'
+    const messages: Record<string, string> = {
+      avatar_too_large: 'A imagem original deve ter no máximo 2 MB.',
+      invalid_avatar_format: 'Escolha uma imagem JPEG, PNG ou WebP válida.',
+      avatar_processing_failed: 'Não foi possível preparar essa imagem.',
+    }
+    avatarError.value = messages[reason] || messages.avatar_processing_failed!
+    input.value = ''
+  } finally {
+    processingAvatar.value = false
+  }
 }
 
 function clearPreview() {
@@ -103,8 +127,10 @@ onBeforeUnmount(() => {
         <div class="avatar-editor">
           <img v-if="currentAvatarUrl" :src="currentAvatarUrl" alt="Prévia da foto de perfil">
           <span v-else class="avatar-fallback">{{ nickname.charAt(0).toUpperCase() || '♟' }}</span>
-          <label class="file-label">Foto de perfil<input type="file" accept="image/jpeg,image/png,image/webp" @change="selectAvatar"><small>JPEG, PNG ou WebP · máximo de 2 MB</small></label>
+          <label class="file-label">Foto de perfil<input type="file" accept="image/jpeg,image/png,image/webp" :disabled="processingAvatar" @change="selectAvatar"><small>JPEG, PNG ou WebP · máximo de 2 MB · salva em {{ AVATAR_OUTPUT_SIZE }}×{{ AVATAR_OUTPUT_SIZE }}</small></label>
         </div>
+        <p v-if="processingAvatar" class="avatar-message">Preparando e recortando a imagem…</p>
+        <p v-if="avatarError" class="error">{{ avatarError }}</p>
         <label>Apelido<input v-model="nickname" required minlength="3" maxlength="32" autocomplete="nickname"></label>
         <div class="form-field">
           <span class="field-label">País</span>
@@ -140,7 +166,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="rating"><span>Rating</span><strong>{{ auth.user?.rating }}</strong><small>Será atualizado automaticamente pelo sistema competitivo na Fase 2.4.</small></div>
-        <button type="submit" :disabled="saving">{{ saving ? 'Salvando...' : 'Salvar alterações' }}</button>
+        <button type="submit" :disabled="saving || processingAvatar">{{ saving ? 'Salvando...' : 'Salvar alterações' }}</button>
         <p v-if="saved" class="success">Perfil atualizado com sucesso.</p>
         <p v-if="auth.error" class="error">{{ auth.error }}</p>
       </form>
@@ -149,7 +175,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.settings-shell{min-height:100vh;padding:clamp(1.2rem,5vw,4rem);color:var(--text);background:var(--bg)}.back{color:var(--accent);text-decoration:none}.back:hover{text-decoration:underline}.settings-card{width:min(720px,100%);margin:1.5rem auto 0;padding:clamp(1.5rem,5vw,3rem);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow)}.appearance-card{margin-top:5vh}.eyebrow{color:var(--accent);font-size:.72rem;font-weight:800;letter-spacing:.12em}.settings-card h1{margin:.4rem 0;font-size:2rem;letter-spacing:-.03em}.settings-card>p{margin:0 0 2rem;color:var(--text-muted)}form,label,.form-field{display:grid;gap:.6rem}form{gap:1.2rem}label,.field-label{color:var(--text-muted);font-size:.9rem}input,select,button{padding:.9rem 1rem;color:var(--text);background:var(--surface-strong);border:1px solid var(--border);border-radius:10px;font:inherit}button{color:var(--accent-ink);font-weight:700;background:var(--accent);border-color:var(--accent);cursor:pointer}button:disabled{opacity:.65;cursor:wait}.rating{display:grid;grid-template-columns:1fr auto;gap:.35rem 1rem;padding:1rem;background:var(--surface-strong);border-radius:12px}.rating strong{color:var(--accent)}.rating small{grid-column:1/-1;color:var(--text-muted)}.success,.error{margin:0;text-align:center}.success{color:var(--success)}.error{color:var(--danger)}.avatar-editor{display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--surface-strong);border-radius:14px}.avatar-editor img,.avatar-fallback{width:76px;height:76px;flex:0 0 auto;border-radius:50%;object-fit:cover}.avatar-fallback{display:grid;place-items:center;color:var(--accent-ink);background:var(--accent);font:700 1.7rem Georgia,serif}.file-label{flex:1}.file-label input{width:100%;padding:.6rem}.file-label small{color:var(--text-muted)}
+.settings-shell{min-height:100vh;padding:clamp(1.2rem,5vw,4rem);color:var(--text);background:var(--bg)}.back{color:var(--accent);text-decoration:none}.back:hover{text-decoration:underline}.settings-card{width:min(720px,100%);margin:1.5rem auto 0;padding:clamp(1.5rem,5vw,3rem);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow)}.appearance-card{margin-top:5vh}.eyebrow{color:var(--accent);font-size:.72rem;font-weight:800;letter-spacing:.12em}.settings-card h1{margin:.4rem 0;font-size:2rem;letter-spacing:-.03em}.settings-card>p{margin:0 0 2rem;color:var(--text-muted)}form,label,.form-field{display:grid;gap:.6rem}form{gap:1.2rem}label,.field-label{color:var(--text-muted);font-size:.9rem}input,select,button{padding:.9rem 1rem;color:var(--text);background:var(--surface-strong);border:1px solid var(--border);border-radius:10px;font:inherit}button{color:var(--accent-ink);font-weight:700;background:var(--accent);border-color:var(--accent);cursor:pointer}button:disabled{opacity:.65;cursor:wait}.rating{display:grid;grid-template-columns:1fr auto;gap:.35rem 1rem;padding:1rem;background:var(--surface-strong);border-radius:12px}.rating strong{color:var(--accent)}.rating small{grid-column:1/-1;color:var(--text-muted)}.success,.error{margin:0;text-align:center}.success{color:var(--success)}.error{color:var(--danger)}.avatar-message{margin:0;color:var(--text-muted);font-size:.8rem;text-align:center}.avatar-editor{display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--surface-strong);border-radius:14px}.avatar-editor img,.avatar-fallback{width:76px;height:76px;flex:0 0 auto;border-radius:50%;object-fit:cover}.avatar-fallback{display:grid;place-items:center;color:var(--accent-ink);background:var(--accent);font:700 1.7rem Georgia,serif}.file-label{flex:1}.file-label input{width:100%;padding:.6rem}.file-label small{color:var(--text-muted)}
 .country-picker{position:relative}.country-trigger{display:flex;width:100%;align-items:center;justify-content:space-between;color:var(--text);background:var(--surface-strong);border-color:var(--border);font-weight:500;text-align:left}.country-value{display:flex;align-items:center;gap:.7rem}.country-menu{position:absolute;z-index:20;top:calc(100% + .4rem);right:0;left:0;padding:.55rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}.country-menu>input{width:100%;margin-bottom:.45rem}.country-options{display:grid;max-height:310px;overflow:auto;overscroll-behavior:contain}.country-options button{display:flex;align-items:center;gap:.65rem;padding:.65rem .75rem;color:var(--text);background:transparent;border:0;border-radius:8px;font-weight:500;text-align:left}.country-options button:hover,.country-options button[aria-selected="true"]{color:var(--text);background:var(--surface-hover)}
 .country-picker :deep(.flag){width:1.2em;height:1.2em}
 </style>

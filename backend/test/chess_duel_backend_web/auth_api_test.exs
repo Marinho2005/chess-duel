@@ -98,6 +98,7 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
 
     assert profile["nickname"] == "public_player"
     assert profile["rating"] == 1200
+    assert profile["status"] == "offline"
     assert profile["inserted_at"]
     refute Map.has_key?(profile, "email")
 
