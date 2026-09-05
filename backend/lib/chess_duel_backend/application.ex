@@ -11,14 +11,22 @@ defmodule ChessDuelBackend.Application do
         {Oban, Application.fetch_env!(:chess_duel_backend, Oban)},
         {Phoenix.PubSub, name: ChessDuelBackend.PubSub},
         ChessDuelBackend.ChessValidator,
+        ChessDuelBackend.Broadcasts.Cache,
+        {Task.Supervisor, name: ChessDuelBackend.BroadcastAnalysisSupervisor},
+        ChessDuelBackend.Broadcasts.Analysis,
         ChessDuelBackend.Games.Lobby,
         ChessDuelBackend.Games.GuestMatchmaker,
         ChessDuelBackend.Games.PrivateRooms,
         {Registry, keys: :unique, name: ChessDuelBackend.GameRegistry},
         {DynamicSupervisor, name: ChessDuelBackend.GameSupervisor, strategy: :one_for_one},
+        {Registry, keys: :unique, name: ChessDuelBackend.PuzzleRushRegistry},
+        {DynamicSupervisor, name: ChessDuelBackend.PuzzleRushSupervisor, strategy: :one_for_one},
+        {Registry, keys: :unique, name: ChessDuelBackend.PuzzleBattleRegistry},
+        {DynamicSupervisor, name: ChessDuelBackend.PuzzleBattleSupervisor, strategy: :one_for_one},
         ChessDuelBackend.Games.Rematches,
         redix_child_spec(),
         ChessDuelBackend.Games.Matchmaker,
+        ChessDuelBackend.Puzzles.BattleMatchmaker,
         ChessDuelBackendWeb.Endpoint
       ]
 

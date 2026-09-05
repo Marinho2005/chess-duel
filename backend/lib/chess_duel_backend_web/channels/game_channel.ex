@@ -154,18 +154,25 @@ defmodule ChessDuelBackendWeb.GameChannel do
   defp public_player(%{game_type: :bot, bot_color: "white", bot: bot}, :white), do: Bots.public(bot)
   defp public_player(%{game_type: :bot, bot_color: "black", bot: bot}, :black), do: Bots.public(bot)
 
-  defp public_player(state, :white), do: registered_player(state.white_player_id)
-  defp public_player(state, :black), do: registered_player(state.black_player_id)
+  defp public_player(state, :white), do: registered_player(state.white_player_id, state)
+  defp public_player(state, :black), do: registered_player(state.black_player_id, state)
 
-  defp registered_player(nil), do: nil
+  defp registered_player(nil, _state), do: nil
 
-  defp registered_player(user_id) do
+  defp registered_player(user_id, state) do
     with {:ok, user_id} <- Ecto.UUID.cast(user_id),
          user when not is_nil(user) <- Accounts.get_user(user_id) do
       %{
         id: user.id,
         nickname: user.nickname,
-        rating: user.rating,
+        rating:
+          ChessDuelBackend.Accounts.User.rating_for(
+            user,
+            ChessDuelBackend.Games.TimeControl.rating_category(
+              state.initial_time_ms,
+              state.increment_ms
+            )
+          ),
         avatar_url: user.avatar_path,
         country_code: user.country_code
       }

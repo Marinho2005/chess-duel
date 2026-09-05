@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RankedPlayer } from '~/components/ranking/RankingList.vue'
+import { Clock3, Flame, Rocket } from 'lucide-vue-next'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -9,23 +10,28 @@ type RankingResponse = {
 }
 
 const route = useRoute()
-const { request, baseURL } = useApi()
+const { request } = useApi()
 const players = ref<RankedPlayer[]>([])
 const pagination = ref({ page: 1, page_size: 50, total: 0, total_pages: 1 })
 const loading = ref(true)
 const errorMessage = ref('')
+const categories = [
+  { id: 'bullet', label: 'Bullet' }, { id: 'blitz', label: 'Blitz' },
+  { id: 'rapid', label: 'Rapid' }
+] as const
+const selectedCategory = computed(() => categories.some(item => item.id === route.query.category) ? String(route.query.category) : 'blitz')
 const requestedPage = computed(() => {
   const value = Number(route.query.page)
   return Number.isInteger(value) && value > 0 ? value : 1
 })
 const firstPosition = computed(() => (pagination.value.page - 1) * pagination.value.page_size + 1)
 
-watch(requestedPage, loadRanking, { immediate: true })
+watch([requestedPage, selectedCategory], ([page]) => loadRanking(page), { immediate: true })
 
 async function loadRanking(page: number) {
   loading.value = true
   errorMessage.value = ''
-  const result = await request<RankingResponse>('/api/ranking', { query: { page } })
+  const result = await request<RankingResponse>('/api/ranking', { query: { page, category: selectedCategory.value } })
   loading.value = false
 
   if (!result.data) {
@@ -39,8 +45,10 @@ async function loadRanking(page: number) {
 
 async function changePage(page: number) {
   if (page < 1 || page > pagination.value.total_pages) return
-  await navigateTo({ path: '/ranking', query: page === 1 ? {} : { page } })
+  await navigateTo({ path: '/ranking', query: { category: selectedCategory.value, ...(page === 1 ? {} : { page }) } })
 }
+
+async function selectCategory(category: string) { await navigateTo({ path: '/ranking', query: { category } }) }
 </script>
 
 <template>
@@ -53,11 +61,19 @@ async function changePage(page: number) {
       </header>
 
       <section class="panel" aria-live="polite">
+        <nav class="categories" aria-label="Modalidade do ranking">
+          <button v-for="category in categories" :key="category.id" :class="{ active: selectedCategory === category.id }" @click="selectCategory(category.id)">
+            <Rocket v-if="category.id === 'bullet'" class="category-icon" :size="18" :stroke-width="2" aria-hidden="true" />
+            <Flame v-else-if="category.id === 'blitz'" class="category-icon" :size="18" :stroke-width="2" aria-hidden="true" />
+            <Clock3 v-else class="category-icon" :size="18" :stroke-width="2" aria-hidden="true" />
+            {{ category.label }}
+          </button>
+        </nav>
         <div class="summary"><strong>{{ pagination.total }}</strong> jogador(es) no ranking</div>
         <p v-if="loading" class="state">Carregando classificação...</p>
         <p v-else-if="errorMessage" class="state error">{{ errorMessage }}</p>
         <p v-else-if="!players.length" class="state">Ainda não há jogadores classificados.</p>
-        <RankingRankingList v-else :players="players" :first-position="firstPosition" :api-base-url="baseURL" />
+        <RankingList v-else :players="players" :first-position="firstPosition" />
 
         <nav v-if="!loading && pagination.total_pages > 1" class="pagination" aria-label="Paginação do ranking">
           <button :disabled="pagination.page === 1" @click="changePage(pagination.page - 1)">Anterior</button>
@@ -80,5 +96,9 @@ header span { display: block; margin-top: .65rem; color: #806d5d; }
 .state { margin: 0; padding: 2rem; color: #806d5d; text-align: center; border: 1px dashed #dfcfb8; border-radius: 12px; }.state.error { color: #9e3828; background: #f9ded5; border-style: solid; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.2rem; color: #806d5d; font-size: .88rem; }
 button { padding: .7rem 1rem; color: #3c2b20; background: #f7eedf; border: 1px solid #dfcfb8; border-radius: 9px; cursor: pointer; }button:disabled { opacity: .5; cursor: default; }
+.categories { display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem; margin-bottom:1.2rem; }.categories button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }.categories button.active { color:var(--accent-ink); background:var(--accent); border-color:var(--accent); }
+.category-icon { flex: 0 0 auto; }
 @media (max-width: 760px) { .content { padding: 1rem; }.pagination { justify-content: space-between; gap: .5rem; } }
+@media (max-width:600px) { .categories { grid-template-columns:repeat(2,1fr); } }
+.page-shell { color: var(--text); background: var(--bg); }.content { width: min(1120px, 100%); margin: auto; }header, .panel { background: var(--surface); border-color: var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow); }header p, .summary strong { color: var(--accent); }h1 { font-family: inherit; font-weight: 700; letter-spacing: -.035em; }header span, .summary, .state, .pagination { color: var(--text-muted); }.state { border-color: var(--border); }.state.error { color: var(--danger); background: var(--danger-soft); }button { color: var(--text); background: var(--surface-strong); border-color: var(--border); }
 </style>

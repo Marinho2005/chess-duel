@@ -168,6 +168,22 @@ defmodule ChessDuelBackend.Games.GameServer do
     end
   end
 
+  def list_active_states do
+    GameRegistry
+    |> Registry.select([{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2"}}]}])
+    |> Task.async_stream(
+      fn {_game_id, pid} -> GenServer.call(pid, :get_state, 1_000) end,
+      max_concurrency: 8,
+      timeout: 1_500,
+      on_timeout: :kill_task,
+      ordered: false
+    )
+    |> Enum.flat_map(fn
+      {:ok, {:ok, state}} -> [state]
+      _ -> []
+    end)
+  end
+
   @impl true
   def init(game_id) when is_binary(game_id), do: init({game_id, nil, :registered})
 

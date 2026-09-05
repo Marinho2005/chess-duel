@@ -9,7 +9,7 @@ defineEmits<{ logout: [] }>()
 const items = [
   { key: 'challenges', label: 'Desafios', to: '/lobby', icon: Swords },
   { key: 'ranking', label: 'Ranking', to: '/ranking', icon: Trophy },
-  { key: 'puzzles', label: 'Puzzles', to: '/puzzles', icon: Puzzle },
+  { key: 'puzzles', label: 'Problemas', to: '/puzzles', icon: Puzzle },
   { key: 'bots', label: 'Bots', to: '/bots', icon: Bot },
   { key: 'profile', label: 'Editar perfil', to: '/settings/profile', icon: UserRoundCog }
 ] as const

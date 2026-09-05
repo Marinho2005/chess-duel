@@ -4,9 +4,9 @@ defmodule ChessDuelBackendWeb.GamesChannel do
   alias ChessDuelBackend.Games.Lobby
 
   @impl true
-  def join("games:lobby", _payload, socket) do
+  def join("games:lobby", payload, socket) do
     if socket.assigns[:identity_type] == :user do
-      state = Lobby.connect(socket.assigns.current_user)
+      state = Lobby.connect(socket.assigns.current_user, Map.get(payload, "status", "online"))
       ChessDuelBackendWeb.Endpoint.broadcast("games:lobby", "lobby_updated", state)
       {:ok, state, assign(socket, :joined_lobby, true)}
     else
@@ -25,6 +25,17 @@ defmodule ChessDuelBackendWeb.GamesChannel do
   end
 
   @impl true
+  def handle_in("set_presence", %{"status" => presence_status}, socket) do
+    case Lobby.set_presence(socket.assigns.user_id, presence_status) do
+      {:ok, state} ->
+        broadcast_lobby(state, socket)
+        {:reply, :ok, socket}
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: Atom.to_string(reason)}}, socket}
+    end
+  end
+
   def handle_in("challenge", %{"user_id" => challenged_id} = payload, socket) do
     time_control_id = Map.get(payload, "time_control", "blitz_3_0")
 

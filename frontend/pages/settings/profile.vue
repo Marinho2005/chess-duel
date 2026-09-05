@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { countries, countryFlag, countryName } from '~/utils/countries'
+import { countries, countryName } from '~/utils/countries'
+import { AVATAR_OUTPUT_SIZE, normalizeAvatarImage } from '~/utils/avatarImage'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -10,7 +11,19 @@ const saving = ref(false)
 const saved = ref(false)
 const selectedAvatar = ref<File | null>(null)
 const previewUrl = ref<string | null>(null)
+const processingAvatar = ref(false)
+const avatarError = ref('')
 const config = useRuntimeConfig()
+const countryPicker = ref<HTMLElement | null>(null)
+const countryOpen = ref(false)
+const countrySearch = ref('')
+
+const selectedCountry = computed(() => countries.find(item => item.code === countryCode.value) || null)
+const filteredCountries = computed(() => {
+  const search = countrySearch.value.trim().toLocaleLowerCase('pt-BR')
+  if (!search) return countries
+  return countries.filter(item => item.name.toLocaleLowerCase('pt-BR').includes(search) || item.code.toLowerCase().includes(search))
+})
 
 const currentAvatarUrl = computed(() => {
   if (previewUrl.value) return previewUrl.value
@@ -20,6 +33,7 @@ const currentAvatarUrl = computed(() => {
 onMounted(() => {
   nickname.value = auth.user?.nickname || ''
   countryCode.value = auth.user?.country_code || ''
+  document.addEventListener('pointerdown', closeCountryPicker)
 })
 
 async function save() {
@@ -44,12 +58,33 @@ async function save() {
   }
 }
 
-function selectAvatar(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0] || null
-  selectedAvatar.value = file
+async function selectAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] || null
+  selectedAvatar.value = null
   clearPreview()
+  avatarError.value = ''
 
-  if (file) previewUrl.value = URL.createObjectURL(file)
+  if (!file) return
+
+  processingAvatar.value = true
+
+  try {
+    const normalizedAvatar = await normalizeAvatarImage(file)
+    selectedAvatar.value = normalizedAvatar
+    previewUrl.value = URL.createObjectURL(normalizedAvatar)
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'avatar_processing_failed'
+    const messages: Record<string, string> = {
+      avatar_too_large: 'A imagem original deve ter no máximo 2 MB.',
+      invalid_avatar_format: 'Escolha uma imagem JPEG, PNG ou WebP válida.',
+      avatar_processing_failed: 'Não foi possível preparar essa imagem.',
+    }
+    avatarError.value = messages[reason] || messages.avatar_processing_failed!
+    input.value = ''
+  } finally {
+    processingAvatar.value = false
+  }
 }
 
 function clearPreview() {
@@ -57,12 +92,31 @@ function clearPreview() {
   previewUrl.value = null
 }
 
-onBeforeUnmount(clearPreview)
+function selectCountry(code: string) {
+  countryCode.value = code
+  countryOpen.value = false
+  countrySearch.value = ''
+}
+
+function closeCountryPicker(event: PointerEvent) {
+  if (!countryPicker.value?.contains(event.target as Node)) countryOpen.value = false
+}
+
+onBeforeUnmount(() => {
+  clearPreview()
+  document.removeEventListener('pointerdown', closeCountryPicker)
+})
 </script>
 
 <template>
   <main class="settings-shell">
-    <NuxtLink class="back" to="/lobby">← Voltar para os desafios</NuxtLink>
+    <NuxtLink class="back" to="/lobby">← Voltar para Jogar</NuxtLink>
+
+    <section class="settings-card appearance-card">
+      <span class="eyebrow">APARÊNCIA</span><h1>Aparência</h1>
+      <p>Escolha como o ChessDuel aparece neste navegador.</p>
+      <SettingsThemeSwitcher />
+    </section>
 
     <section class="settings-card">
       <span class="eyebrow">MINHA CONTA</span>
@@ -73,12 +127,46 @@ onBeforeUnmount(clearPreview)
         <div class="avatar-editor">
           <img v-if="currentAvatarUrl" :src="currentAvatarUrl" alt="Prévia da foto de perfil">
           <span v-else class="avatar-fallback">{{ nickname.charAt(0).toUpperCase() || '♟' }}</span>
-          <label class="file-label">Foto de perfil<input type="file" accept="image/jpeg,image/png,image/webp" @change="selectAvatar"><small>JPEG, PNG ou WebP · máximo de 2 MB</small></label>
+          <label class="file-label">Foto de perfil<input type="file" accept="image/jpeg,image/png,image/webp" :disabled="processingAvatar" @change="selectAvatar"><small>JPEG, PNG ou WebP · máximo de 2 MB · salva em {{ AVATAR_OUTPUT_SIZE }}×{{ AVATAR_OUTPUT_SIZE }}</small></label>
         </div>
+        <p v-if="processingAvatar" class="avatar-message">Preparando e recortando a imagem…</p>
+        <p v-if="avatarError" class="error">{{ avatarError }}</p>
         <label>Apelido<input v-model="nickname" required minlength="3" maxlength="32" autocomplete="nickname"></label>
-        <label>País<select v-model="countryCode" autocomplete="country-name"><option value="">Prefiro não informar</option><option v-for="item in countries" :key="item.code" :value="item.code">{{ countryFlag(item.code) }} {{ item.name }}</option></select></label>
+        <div class="form-field">
+          <span class="field-label">País</span>
+          <div ref="countryPicker" class="country-picker" @keydown.esc="countryOpen = false">
+            <button
+              type="button"
+              class="country-trigger"
+              :aria-expanded="countryOpen"
+              aria-haspopup="listbox"
+              @click="countryOpen = !countryOpen"
+            >
+              <span v-if="selectedCountry" class="country-value"><ProfileCountryFlag :code="selectedCountry.code" />{{ selectedCountry.name }}</span>
+              <span v-else>Prefiro não informar</span>
+              <span aria-hidden="true">⌄</span>
+            </button>
+            <div v-if="countryOpen" class="country-menu">
+              <input v-model="countrySearch" type="search" placeholder="Buscar país" autocomplete="off" aria-label="Buscar país">
+              <div class="country-options" role="listbox" aria-label="País">
+                <button type="button" role="option" :aria-selected="countryCode === ''" @click="selectCountry('')">Prefiro não informar</button>
+                <button
+                  v-for="item in filteredCountries"
+                  :key="item.code"
+                  type="button"
+                  role="option"
+                  :aria-selected="countryCode === item.code"
+                  @click="selectCountry(item.code)"
+                >
+                  <ProfileCountryFlag :code="item.code" />
+                  <span>{{ item.name }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="rating"><span>Rating</span><strong>{{ auth.user?.rating }}</strong><small>Será atualizado automaticamente pelo sistema competitivo na Fase 2.4.</small></div>
-        <button type="submit" :disabled="saving">{{ saving ? 'Salvando...' : 'Salvar alterações' }}</button>
+        <button type="submit" :disabled="saving || processingAvatar">{{ saving ? 'Salvando...' : 'Salvar alterações' }}</button>
         <p v-if="saved" class="success">Perfil atualizado com sucesso.</p>
         <p v-if="auth.error" class="error">{{ auth.error }}</p>
       </form>
@@ -87,9 +175,7 @@ onBeforeUnmount(clearPreview)
 </template>
 
 <style scoped>
-.settings-shell { min-height: 100vh; padding: clamp(1.2rem, 5vw, 4rem); color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }.back { color: #7f5130; text-decoration: none; }.back:hover { text-decoration: underline; }
-.settings-card { width: min(620px, 100%); margin: 5vh auto 0; padding: clamp(1.5rem, 5vw, 3rem); background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 22px; box-shadow: 0 20px 45px #6f45281c; }.eyebrow { color: #6f4528; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }.settings-card h1 { margin: 0.4rem 0; font: 500 2.5rem Georgia, serif; }.settings-card > p { margin: 0 0 2rem; color: #857060; }
-form, label { display: grid; gap: 0.6rem; }form { gap: 1.2rem; }label { color: #6e5847; font-size: 0.9rem; }input, select, button { padding: 0.9rem 1rem; color: inherit; background: white; border: 1px solid #dfd2c1; border-radius: 10px; font: inherit; }button { color: white; font-weight: 700; background: #6f4528; border-color: #6f4528; cursor: pointer; }button:disabled { opacity: 0.65; cursor: wait; }
-.rating { display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 1rem; padding: 1rem; background: #efe3cf; border-radius: 12px; }.rating strong { color: #6f4528; }.rating small { grid-column: 1 / -1; color: #806d5d; }.success, .error { margin: 0; text-align: center; }.success { color: #56784a; }.error { color: #b33e2e; }
-.avatar-editor { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #efe3cf; border-radius: 14px; }.avatar-editor img, .avatar-fallback { width: 76px; height: 76px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; }.avatar-fallback { display: grid; place-items: center; color: white; background: #6f4528; font: 700 1.7rem Georgia, serif; }.file-label { flex: 1; }.file-label input { width: 100%; padding: 0.6rem; }.file-label small { color: #806d5d; }
+.settings-shell{min-height:100vh;padding:clamp(1.2rem,5vw,4rem);color:var(--text);background:var(--bg)}.back{color:var(--accent);text-decoration:none}.back:hover{text-decoration:underline}.settings-card{width:min(720px,100%);margin:1.5rem auto 0;padding:clamp(1.5rem,5vw,3rem);background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow)}.appearance-card{margin-top:5vh}.eyebrow{color:var(--accent);font-size:.72rem;font-weight:800;letter-spacing:.12em}.settings-card h1{margin:.4rem 0;font-size:2rem;letter-spacing:-.03em}.settings-card>p{margin:0 0 2rem;color:var(--text-muted)}form,label,.form-field{display:grid;gap:.6rem}form{gap:1.2rem}label,.field-label{color:var(--text-muted);font-size:.9rem}input,select,button{padding:.9rem 1rem;color:var(--text);background:var(--surface-strong);border:1px solid var(--border);border-radius:10px;font:inherit}button{color:var(--accent-ink);font-weight:700;background:var(--accent);border-color:var(--accent);cursor:pointer}button:disabled{opacity:.65;cursor:wait}.rating{display:grid;grid-template-columns:1fr auto;gap:.35rem 1rem;padding:1rem;background:var(--surface-strong);border-radius:12px}.rating strong{color:var(--accent)}.rating small{grid-column:1/-1;color:var(--text-muted)}.success,.error{margin:0;text-align:center}.success{color:var(--success)}.error{color:var(--danger)}.avatar-message{margin:0;color:var(--text-muted);font-size:.8rem;text-align:center}.avatar-editor{display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--surface-strong);border-radius:14px}.avatar-editor img,.avatar-fallback{width:76px;height:76px;flex:0 0 auto;border-radius:50%;object-fit:cover}.avatar-fallback{display:grid;place-items:center;color:var(--accent-ink);background:var(--accent);font:700 1.7rem Georgia,serif}.file-label{flex:1}.file-label input{width:100%;padding:.6rem}.file-label small{color:var(--text-muted)}
+.country-picker{position:relative}.country-trigger{display:flex;width:100%;align-items:center;justify-content:space-between;color:var(--text);background:var(--surface-strong);border-color:var(--border);font-weight:500;text-align:left}.country-value{display:flex;align-items:center;gap:.7rem}.country-menu{position:absolute;z-index:20;top:calc(100% + .4rem);right:0;left:0;padding:.55rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}.country-menu>input{width:100%;margin-bottom:.45rem}.country-options{display:grid;max-height:310px;overflow:auto;overscroll-behavior:contain}.country-options button{display:flex;align-items:center;gap:.65rem;padding:.65rem .75rem;color:var(--text);background:transparent;border:0;border-radius:8px;font-weight:500;text-align:left}.country-options button:hover,.country-options button[aria-selected="true"]{color:var(--text);background:var(--surface-hover)}
+.country-picker :deep(.flag){width:1.2em;height:1.2em}
 </style>

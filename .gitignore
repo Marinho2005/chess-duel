@@ -15,6 +15,9 @@
 /backend/elixir_ls.debug*
 /backend/.elixir_ls/
 /backend/priv/chess_validator/node_modules/
+/backend/priv/repo/lichess_db_puzzle.csv
+/backend/priv/repo/lichess_db_puzzle.csv.zst
+/backend/priv/repo/lichess_puzzles.csv
 
 # Node / Nuxt
 /frontend/node_modules/

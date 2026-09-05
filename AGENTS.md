@@ -113,23 +113,24 @@ develop estável -> Pull Request -> main
 
 - [x] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes. Contas locais precisam confirmar o e-mail antes de receber token ou acessar o sistema; em desenvolvimento, o link é exibido no log do backend.
 - [x] **2.2 OAuth (login social)** — Login com Google, Discord e GitHub via Ueberauth e identidades externas genéricas; somente Google verificado vincula automaticamente por e-mail. Todos reutilizam o bearer token do frontend.
-- [x] **2.3 Perfil de jogador** — Página pública com foto de perfil (inicial como fallback), apelido, país, rating e data de criação; edição autenticada do próprio perfil e proteção das rotas privadas.
-- [x] **2.4 Sistema de rating** — ELO com K=32 atualizado de forma assíncrona, atômica e idempotente ao fim da partida; snapshots e histórico de variações persistidos para auditoria.
+- [x] **2.3 Perfil de jogador** — Página pública em `/user/:username` com foto de perfil (inicial como fallback), apelido, país, data de criação, estatísticas, partidas recentes e quatro ratings; edição autenticada do próprio perfil e proteção das rotas privadas.
+- [x] **2.4 Sistema de rating** — ELO com K=32 atualizado de forma assíncrona, atômica e idempotente ao fim da partida; ratings independentes para Bullet, Blitz (compartilhado por 3+0 e 5+0) e Rapid, com snapshots e histórico por categoria persistidos para auditoria.
 - [x] **2.5 Histórico de partidas** — Lista paginada das partidas finalizadas do usuário, com oponente, resultado sob sua perspectiva, motivo, variação de rating e data.
 
 ### Fase 3 — Matchmaking sério — COMPLETA
 
 - [x] **3.1 Fila por rating** — Fila por formato no Valkey, com pareamento periódico por proximidade de rating, tolerância crescente e entrada/cancelamento pelo lobby em tempo real.
-- [x] **3.2 Tempo configurável** — Bullet 1+0, Blitz 3+0, Blitz 5+3 e Rapid 10+0 selecionáveis nos desafios; tempo inicial e incremento Fischer são autoritativos no `GameServer` e persistidos por partida.
+- [x] **3.2 Tempo configurável** — Bullet 1+0, Blitz 3+0, Blitz 5+0 e Rapid 10+0 selecionáveis nos desafios; os relógios sem incremento são autoritativos no `GameServer` e persistidos por partida.
 - [x] **3.3 Salas privadas** — Criação de sala com link de convite, para jogar com amigos sem passar pela fila de matchmaking.
 
 ### Fase 4 — Puzzles e análise
 
 - [x] **4.1 Worker Stockfish separado** — Processo UCI isolado do game service, executado por uma fila Oban dedicada para não competir por recursos com partidas ao vivo.
 - [x] **4.2 Análise pós-jogo assíncrona** — Stockfish analisa partidas finalizadas em background; participantes acompanham o processamento e revisam a partida em uma tela interativa com replay, classificações e barra de avaliação.
-- [ ] **4.3 Banco de puzzles táticos** — Curadoria/geração de puzzles a partir de partidas reais.
-- [ ] **4.4 Puzzle Rush** — Modo de puzzles cronometrados, estilo chess.com.
+- [x] **4.3 Banco de puzzles táticos** — Importação streaming de um subconjunto distribuído do dataset CC0 do Lichess, seleção por rating, tentativas persistidas e interface interativa com Chessground. O FEN antecede a sequência: o lance de índice 0 é preparação automática, o usuário joga os índices ímpares e as respostas pares são automáticas. O `puzzle_rating` começa em 1200 e é independente do rating de partidas.
+- [x] **4.4 Puzzle Rush** — Sessões autoritativas cronometradas em GenServers próprios, sequência crescente por dificuldade, limite de três erros, placares separados e interface com modos de 3 e 5 minutos.
 - [x] **4.5 Partidas contra bots** — Stockfish com cinco níveis de força, integrado ao `GameServer`, com personagens ilustrados, preparação autoritativa, abortar, desistir e partidas sem alteração de rating.
+- [x] **4.6 Puzzle Battle** — Matchmaking separado por duração e proximidade de `battle_rating`, duelos autoritativos em Phoenix Channels com a mesma sequência para ambos, progresso independente, reconexão, desempate determinístico e rating Elo próprio.
 
 ### Fase 5 — Monetização (SaaS)
 
@@ -141,7 +142,7 @@ develop estável -> Pull Request -> main
 
 - [ ] **6.1 Torneios** — Sistema de inscrição, chaveamento, ranking de torneio.
 - [ ] **6.2 Clubes e chat** — Comunidades dentro da plataforma.
-- [ ] **6.3 Espectadores/streaming** — Assistir partidas ao vivo de outros jogadores.
+- [~] **6.3 Espectadores/streaming** — Broadcasts profissionais do Lichess podem ser assistidos em tempo real dentro do ChessDuel; a página `/observar` agrupa os broadcasts ativos por torneio, exibe suas imagens oficiais, lista até 30 partidas por torneio e permite filtrar os previews de partidas humanas por Bullet, Blitz 3+0, Blitz 5+0 e Rapid. Os avatares indicam presença no canto inferior direito, e o lobby alterna entre os dois feeds. Espectação completa das partidas internas continua pendente.
 - [ ] **6.4 Multi-região** — Escala geográfica, quando o volume de usuários justificar.
 
 ### Fora do roadmap numerado, mas necessária em algum momento
@@ -149,13 +150,20 @@ develop estável -> Pull Request -> main
 - [x] **UI real de jogo** — Rota `/game/:gameId/live` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 - [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
-- [x] **Navegação para funcionalidades futuras** — O item "Puzzles" permanece como placeholder visual aguardando as etapas 4.3 e 4.4; "Bots" agora leva à seleção funcional implementada na etapa 4.5.
+- [x] **Navegação das funcionalidades** — Os itens "Puzzles" e "Bots" levam às interfaces funcionais implementadas nas etapas 4.3–4.6; o hub de puzzles separa Classic, Rush e Battle.
 - [x] **Polimento de UX/UI da partida** — Sons discretos com preferência local, país ISO com bandeira reutilizável, ação pós-jogo para análise, planilha SAN por full move e microinterações acessíveis na navegação.
 - [x] **Revanche e preferência de layout** — Partidas encerradas permitem revanche com cores invertidas contra humanos ou bots; o tamanho conjunto do tabuleiro e das identidades dos jogadores é configurável e persistido, e o replay aceita navegação pelas setas do teclado.
 
 ---
 
 ## Como trabalhar neste projeto
+
+### API e rotas de observação
+
+- `GET /api/broadcasts/tournaments` lista os broadcasts ativos agrupados por torneio, com identificador, nome, imagem oficial e quantidade de partidas ao vivo.
+- `GET /api/broadcasts/tournaments/:tournament_id/games` lista até 30 partidas ao vivo exclusivamente do torneio informado.
+- `GET /api/games/live` aceita o filtro opcional `category=bullet|blitz|blitz_increment|rapid`; `blitz_increment` identifica o segundo controle Blitz atualmente configurado como 5+0.
+- `/observar` oferece as abas Torneios e ChessDuel; `/observar/torneio/:tournamentId` abre as partidas agrupadas e reutiliza `/watch/broadcast/:gameId` para a espectação em tempo real.
 
 1. Sempre ler este arquivo por completo antes de iniciar uma tarefa nova, para entender em qual etapa do roadmap ela se encaixa e quais decisões anteriores precisam ser respeitadas
 2. Seguir rigorosamente o escopo definido no prompt de cada tarefa — não expandir escopo por conta própria (ex: não adicionar autenticação "de brinde" numa tarefa que não pediu isso, mesmo que pareça relacionado)

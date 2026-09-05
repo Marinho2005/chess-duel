@@ -3,14 +3,15 @@ import { Chess, type Square } from 'chess.js'
 import type { Api } from '@lichess-org/chessground/api'
 import type { Color, Dests, Key } from '@lichess-org/chessground/types'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   fen: string
   orientation: Color
   turnColor: Color
   lastMove?: [Key, Key] | null
   check?: boolean
   disabled?: boolean
-}>()
+  animationDuration?: number
+}>(), { animationDuration: 180 })
 
 const emit = defineEmits<{
   move: [move: { from: Key; to: Key; promotion?: 'q'; premove: boolean }]
@@ -27,7 +28,7 @@ onMounted(async () => {
 })
 
 watch(
-  () => [props.fen, props.orientation, props.turnColor, props.lastMove, props.check],
+  () => [props.fen, props.orientation, props.turnColor, props.lastMove, props.check, props.animationDuration],
   () => {
     if (!ground) return
 
@@ -65,7 +66,7 @@ function boardConfig() {
     coordinates: true,
     coordinatesOnSquares: true,
     disableContextMenu: true,
-    animation: { enabled: true, duration: 180 },
+    animation: { enabled: props.animationDuration > 0, duration: props.animationDuration },
     movable: {
       free: false,
       color: props.disabled ? undefined : props.orientation,

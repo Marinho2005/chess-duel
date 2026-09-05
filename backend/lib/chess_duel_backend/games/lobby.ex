@@ -2,11 +2,21 @@ defmodule ChessDuelBackend.Games.Lobby do
   use GenServer
 
   alias ChessDuelBackend.Games.{GameServer, TimeControl}
+  alias ChessDuelBackend.Accounts.User
+
+  @presence_statuses ~w(online away dnd invisible)
 
   def start_link(_opts), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
-  def connect(user), do: GenServer.call(__MODULE__, {:connect, user})
+  def connect(user, presence_status \\ "online"),
+    do: GenServer.call(__MODULE__, {:connect, user, presence_status})
+
   def disconnect(user_id), do: GenServer.call(__MODULE__, {:disconnect, user_id})
+
+  def set_presence(user_id, presence_status),
+    do: GenServer.call(__MODULE__, {:set_presence, user_id, presence_status})
+
+  def presence_status(user_id), do: GenServer.call(__MODULE__, {:presence_status, user_id})
 
   def create_challenge(challenger_id, challenged_id, time_control_id \\ TimeControl.default().id),
     do:
@@ -25,21 +35,45 @@ defmodule ChessDuelBackend.Games.Lobby do
   def init(_state), do: {:ok, %{users: %{}, challenges: %{}}}
 
   @impl true
-  def handle_call({:connect, user}, _from, state) do
+  def handle_call({:connect, user, requested_presence}, _from, state) do
+    presence_status = normalize_presence(requested_presence)
+
     user_data = %{
       id: user.id,
       nickname: user.nickname,
-      rating: user.rating,
-      avatar_url: user.avatar_path
+      rating: user.blitz_rating,
+      ratings: User.ratings(user),
+      avatar_url: user.avatar_path,
+      status: presence_status
     }
 
     users =
       Map.update(state.users, user.id, Map.put(user_data, :connections, 1), fn current ->
-        %{current | connections: current.connections + 1}
+        %{current | connections: current.connections + 1, status: presence_status}
       end)
 
     state = %{state | users: users}
     {:reply, snapshot(state), state}
+  end
+
+  def handle_call({:set_presence, user_id, presence_status}, _from, state)
+      when presence_status in @presence_statuses do
+    case Map.fetch(state.users, user_id) do
+      {:ok, user} ->
+        state = put_in(state.users[user_id], %{user | status: presence_status})
+        {:reply, {:ok, snapshot(state)}, state}
+
+      :error ->
+        {:reply, {:error, :user_offline}, state}
+    end
+  end
+
+  def handle_call({:set_presence, _user_id, _presence_status}, _from, state),
+    do: {:reply, {:error, :invalid_presence}, state}
+
+  def handle_call({:presence_status, user_id}, _from, state) do
+    status = state.users |> Map.get(user_id, %{status: "offline"}) |> Map.fetch!(:status)
+    {:reply, if(status == "invisible", do: "offline", else: status), state}
   end
 
   def handle_call({:disconnect, user_id}, _from, state) do
@@ -68,7 +102,7 @@ defmodule ChessDuelBackend.Games.Lobby do
         state
       ) do
     with {:ok, challenger} <- fetch_online_user(state, challenger_id),
-         {:ok, challenged} <- fetch_online_user(state, challenged_id),
+         {:ok, challenged} <- fetch_challengeable_user(state, challenged_id),
          {:ok, time_control} <- TimeControl.fetch(time_control_id),
          false <- challenge_exists?(state, challenger_id, challenged_id) do
       challenge = %{
@@ -142,6 +176,16 @@ defmodule ChessDuelBackend.Games.Lobby do
     end
   end
 
+  defp fetch_challengeable_user(state, user_id) do
+    with {:ok, user} <- fetch_online_user(state, user_id),
+         true <- user.status in ["online", "away"] do
+      {:ok, user}
+    else
+      false -> {:error, :user_unavailable}
+      error -> error
+    end
+  end
+
   defp challenge_exists?(state, challenger_id, challenged_id) do
     Enum.any?(state.challenges, fn {_id, challenge} ->
       challenge.challenger.id == challenger_id and challenge.challenged.id == challenged_id
@@ -158,10 +202,18 @@ defmodule ChessDuelBackend.Games.Lobby do
 
   defp snapshot(state) do
     %{
-      users: state.users |> Map.values() |> Enum.map(&public_user/1),
+      users:
+        state.users
+        |> Map.values()
+        |> Enum.reject(&(&1.status == "invisible"))
+        |> Enum.map(&public_user/1),
       challenges: Map.values(state.challenges)
     }
   end
 
-  defp public_user(user), do: Map.take(user, [:id, :nickname, :rating, :avatar_url])
+  defp public_user(user),
+    do: Map.take(user, [:id, :nickname, :rating, :avatar_url, :status])
+
+  defp normalize_presence(status) when status in @presence_statuses, do: status
+  defp normalize_presence(_status), do: "online"
 end

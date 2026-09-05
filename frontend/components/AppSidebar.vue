@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bot, Crown, LogOut, Puzzle, Settings, Swords, Trophy } from 'lucide-vue-next'
+import { Bot, Crown, Eye, LogOut, Puzzle, Settings, Swords, Trophy } from 'lucide-vue-next'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -7,8 +7,9 @@ const auth = useAuthStore()
 const items = [
   { key: 'play', label: 'Desafios', to: '/lobby', icon: Swords },
   { key: 'ranking', label: 'Ranking', to: '/ranking', icon: Trophy },
-  { key: 'puzzles', label: 'Puzzles', to: '/puzzles', icon: Puzzle, badge: 'Em breve' },
+  { key: 'puzzles', label: 'Problemas', to: '/puzzles', icon: Puzzle },
   { key: 'bots', label: 'Bots', to: '/bots', icon: Bot },
+  { key: 'watch', label: 'Observar', to: '/observar', icon: Eye },
   { key: 'profile', label: 'Editar perfil', to: '/settings/profile', icon: Settings }
 ]
 
@@ -37,7 +38,6 @@ async function logOut() {
       >
         <component :is="item.icon" :size="20" :stroke-width="1.8" aria-hidden="true" />
         <span>{{ item.label }}</span>
-        <small v-if="item.badge" class="nav-badge">{{ item.badge }}</small>
       </NuxtLink>
     </nav>
 
@@ -100,7 +100,6 @@ nav a:hover svg, nav a:focus-visible svg, nav a.active svg { color: #efc477; }
 .nav-bots:hover svg, .nav-bots:focus-visible svg { transform: rotate(-5deg) scale(1.08); }
 .nav-profile:hover svg, .nav-profile:focus-visible svg { transform: rotate(18deg); }
 nav a.active svg { transform: scale(1.04); }
-.nav-badge { padding: .16rem .36rem; color: #f2d69d; background: #d2a35a29; border: 1px solid #d2a35a52; border-radius: 999px; font-size: .52rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .sidebar-bottom { display: grid; gap: .8rem; margin-top: auto; }.premium-card { display: flex; align-items: center; gap: .7rem; padding: .85rem; color: #efc979; background: linear-gradient(135deg,#bd83351c,#efbf6524); border: 1px solid #d7a35342; border-radius: 12px; }.premium-card div { display: grid; gap: .12rem; }.premium-card strong { font: 700 .86rem Georgia,serif; }.premium-card small { color: var(--side-muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; }
 .sidebar-controls { display: flex; justify-content: flex-end; gap: .55rem; }.sidebar-controls button { display: grid; width: 40px; height: 40px; place-items: center; padding: 0; color: var(--side-muted); background: #ffffff0a; border: 1px solid var(--side-line); border-radius: 10px; cursor: pointer; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }.sidebar-controls button:hover,.sidebar-controls button:focus-visible { color: #f2cb82; background: #e3b55b20; transform: translateY(-1px); }.sidebar-controls button:focus-visible { outline: 2px solid #e4b866; outline-offset: 2px; }.logout span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 
@@ -116,7 +115,7 @@ nav a.active svg { transform: scale(1.04); }
   .logo > span { font-size: 1.3rem; }
   nav { display: flex; flex: 1; justify-content: center; gap: .15rem; }
   nav a { display: flex; padding: .58rem; }
-  nav a::before,.nav-badge,nav a > span,.premium-card { display: none; }
+  nav a::before,nav a > span,.premium-card { display: none; }
   .sidebar-bottom { margin: 0; }
   .sidebar-controls { display: block; }
   .sidebar-controls .logout { width: 38px; height: 38px; }

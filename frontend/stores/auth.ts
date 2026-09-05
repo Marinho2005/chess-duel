@@ -8,8 +8,12 @@ export type AuthUser = {
   country_code: string | null
   avatar_url: string | null
   rating: number
+  ratings: PlayerRatings
   inserted_at: string
 }
+
+export type PlayerRatings = { bullet: number; blitz: number; rapid: number }
+export type PresenceStatus = 'online' | 'away' | 'dnd' | 'invisible'
 
 export type GuestIdentity = {
   id: string
@@ -34,20 +38,37 @@ type GuestResponse = {
 }
 
 const tokenStorageKey = 'chess-duel:auth-token'
+const presenceStorageKey = 'chess-duel:presence'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(null)
   const user = ref<AuthUser | null>(null)
   const guest = ref<GuestIdentity | null>(null)
+  const presence = ref<PresenceStatus>('online')
   const error = ref('')
   const config = useRuntimeConfig()
   const isGuest = computed(() => guest.value !== null)
   const identityId = computed(() => guest.value?.id || user.value?.id || null)
 
-  function restoreSession() {
-    if (import.meta.client && !token.value) {
-      token.value = sessionStorage.getItem(tokenStorageKey)
+  function restorePresence() {
+    if (!import.meta.client) return
+
+    const savedPresence = localStorage.getItem(presenceStorageKey)
+    if (savedPresence && ['online', 'away', 'dnd', 'invisible'].includes(savedPresence)) {
+      presence.value = savedPresence as PresenceStatus
     }
+  }
+
+  function setPresence(status: PresenceStatus) {
+    presence.value = status
+    if (import.meta.client) localStorage.setItem(presenceStorageKey, status)
+  }
+
+  function restoreSession() {
+    if (!import.meta.client) return
+
+    if (!token.value) token.value = sessionStorage.getItem(tokenStorageKey)
+    restorePresence()
   }
 
   function saveSession(response: AuthResponse) {
@@ -270,5 +291,5 @@ export const useAuthStore = defineStore('auth', () => {
     return 'Nao foi possivel concluir a solicitacao.'
   }
 
-  return { token, user, guest, isGuest, identityId, error, restoreSession, register, logIn, startGuestSession, completeOAuth, fetchCurrentUser, updateProfile, updateAvatar, logOut }
+  return { token, user, guest, presence, isGuest, identityId, error, restoreSession, restorePresence, setPresence, register, logIn, startGuestSession, completeOAuth, fetchCurrentUser, updateProfile, updateAvatar, logOut }
 })

@@ -11,17 +11,17 @@ defmodule ChessDuelBackend.Games.PrivateRoomsTest do
     creator = user()
     opponent = user()
 
-    assert {:ok, room} = PrivateRooms.create(creator, :user, "blitz_5_3")
+    assert {:ok, room} = PrivateRooms.create(creator, :user, "blitz_5_0")
     assert room.status == :waiting
-    assert room.time_control.id == "blitz_5_3"
+    assert room.time_control.id == "blitz_5_0"
 
     assert {:ok, :matched, match} = PrivateRooms.join(room.code, opponent, :user)
-    assert match.time_control.id == "blitz_5_3"
+    assert match.time_control.id == "blitz_5_0"
     assert match.guest_game == false
 
     assert {:ok, game} = GameServer.get_state(match.game_id)
     assert game.initial_time_ms == 300_000
-    assert game.increment_ms == 3_000
+    assert game.increment_ms == 0
 
     assert MapSet.new([game.white_player_id, game.black_player_id]) ==
              MapSet.new([creator.id, opponent.id])

@@ -7,6 +7,7 @@ defmodule ChessDuelBackend.Games do
 
   alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackend.Games.Game
+  alias ChessDuelBackend.Games.GameServer
   alias ChessDuelBackend.Games.Bots
   alias ChessDuelBackend.Ratings.RatingChange
   alias ChessDuelBackend.Repo
@@ -32,6 +33,90 @@ defmodule ChessDuelBackend.Games do
     |> Game.changeset(attrs)
     |> Repo.update()
   end
+
+  def list_live_human_games(opts \\ []) do
+    category_filter = Keyword.get(opts, :category)
+    limit = opts |> Keyword.get(:limit, 30) |> max(1) |> min(30)
+
+    states =
+      GameServer.list_active_states()
+      |> Enum.filter(&live_human?/1)
+      |> Enum.filter(&(is_nil(category_filter) or live_category(&1) == category_filter))
+      |> Enum.take(limit)
+
+    player_ids = states |> Enum.flat_map(&[&1.white_player_id, &1.black_player_id]) |> Enum.uniq()
+    users = from(user in User, where: user.id in ^player_ids) |> Repo.all() |> Map.new(&{&1.id, &1})
+
+    Enum.flat_map(states, fn state ->
+      with %User{} = white <- users[state.white_player_id],
+           %User{} = black <- users[state.black_player_id] do
+        category =
+          ChessDuelBackend.Games.TimeControl.rating_category(
+            state.initial_time_ms,
+            state.increment_ms
+          )
+
+        [
+          %{
+            game_id: state.game_id,
+            category: live_category(state),
+            white: live_player(white, category, state),
+            black: live_player(black, category, state),
+            fen: state.fen,
+            current_turn: state.current_turn,
+            white_time_remaining_ms: state.white_time_remaining_ms,
+            black_time_remaining_ms: state.black_time_remaining_ms,
+            initial_time_ms: state.initial_time_ms,
+            increment_ms: state.increment_ms
+          }
+        ]
+      else
+        _ -> []
+      end
+    end)
+  end
+
+  defp live_category(%{initial_time_ms: 60_000, increment_ms: 0}), do: "bullet"
+  defp live_category(%{initial_time_ms: 180_000, increment_ms: 0}), do: "blitz"
+  defp live_category(%{initial_time_ms: 300_000}), do: "blitz_increment"
+  defp live_category(%{initial_time_ms: 600_000, increment_ms: 0}), do: "rapid"
+  defp live_category(_), do: "blitz"
+
+  defp live_human?(state) do
+    state.status == "in_progress" and state.game_type == :registered and
+      is_binary(state.white_player_id) and
+      is_binary(state.black_player_id) and is_nil(state.bot_id)
+  end
+
+  def player_status(user_id) when is_binary(user_id) do
+    case ChessDuelBackend.Games.Lobby.presence_status(user_id) do
+      status when status in ~w(online away dnd) -> status
+      _ -> if connected_to_active_game?(user_id), do: "online", else: "offline"
+    end
+  catch
+    :exit, _ -> if connected_to_active_game?(user_id), do: "online", else: "offline"
+  end
+
+  defp connected_to_active_game?(user_id) do
+    GameServer.list_active_states()
+    |> Enum.any?(fn state ->
+      state.status == "in_progress" and Map.get(state.connected_player_counts, user_id, 0) > 0
+    end)
+  end
+
+  defp live_player(user, category, state),
+    do: %{
+      id: user.id,
+      nickname: user.nickname,
+      rating: User.rating_for(user, category),
+      country_code: user.country_code,
+      avatar_url: user.avatar_path,
+      status:
+        if(Map.get(state.connected_player_counts, user.id, 0) > 0,
+          do: "online",
+          else: "offline"
+        )
+    }
 
   def list_finished_games_for_user(user_id, opts \\ []) when is_binary(user_id) do
     page = opts |> Keyword.get(:page, 1) |> max(1)
@@ -66,6 +151,36 @@ defmodule ChessDuelBackend.Games do
     }
   end
 
+  def public_stats_for_user(user_id) when is_binary(user_id) do
+    games =
+      from(g in Game,
+        where:
+          g.status == "finished" and
+            (g.white_player_id == ^user_id or g.black_player_id == ^user_id),
+        order_by: [asc: g.finished_at]
+      )
+      |> Repo.all()
+
+    results =
+      Enum.map(games, fn game -> result_for_player(game.result, player_color(game, user_id)) end)
+
+    wins = Enum.count(results, &(&1 == "win"))
+
+    %{
+      total_games: length(results),
+      win_rate: if(results == [], do: 0, else: Float.round(wins * 100 / length(results), 1)),
+      current_streak: current_streak(results)
+    }
+  end
+
+  defp current_streak([]), do: 0
+
+  defp current_streak(results) do
+    latest = List.last(results)
+    count = results |> Enum.reverse() |> Enum.take_while(&(&1 == latest)) |> length()
+    if latest == "win", do: count, else: -count
+  end
+
   defp history_entries([], _user_id), do: []
 
   defp history_entries(games, user_id) do
@@ -85,7 +200,7 @@ defmodule ChessDuelBackend.Games do
     rating_changes =
       from(change in RatingChange,
         where: change.user_id == ^user_id and change.game_id in ^game_ids,
-        select: {change.game_id, change.change}
+        select: {change.game_id, %{change: change.change, category: change.category}}
       )
       |> Repo.all()
       |> Map.new()
@@ -112,7 +227,8 @@ defmodule ChessDuelBackend.Games do
         color: color,
         result: result_for_player(game.result, color),
         end_reason: game.end_reason,
-        rating_change: Map.get(rating_changes, game.id),
+        rating_change: get_in(rating_changes, [game.id, :change]),
+        rating_category: get_in(rating_changes, [game.id, :category]),
         time_control:
           ChessDuelBackend.Games.TimeControl.from_values(
             game.initial_time_ms,

@@ -16,7 +16,7 @@ defmodule ChessDuelBackendWeb.RankingControllerTest do
 
       user
       |> User.confirm_changeset()
-      |> Ecto.Changeset.change(rating: 1_000 + index)
+      |> Ecto.Changeset.change(blitz_rating: 1_000 + index)
       |> Repo.update!()
     end
 
@@ -39,6 +39,7 @@ defmodule ChessDuelBackendWeb.RankingControllerTest do
            }
 
     assert hd(first_page["players"])["nickname"] == "rank_52"
+    assert hd(first_page["players"])["status"] == "offline"
     refute Enum.any?(first_page["players"], &(&1["nickname"] == "pending_player"))
 
     second_page = build_conn() |> get("/api/ranking?page=2") |> json_response(200)

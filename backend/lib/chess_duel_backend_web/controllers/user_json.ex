@@ -7,30 +7,33 @@ defmodule ChessDuelBackendWeb.UserJSON do
       country: user.country,
       country_code: user.country_code,
       avatar_url: user.avatar_path,
-      rating: user.rating,
+      rating: user.blitz_rating,
+      ratings: ChessDuelBackend.Accounts.User.ratings(user),
       inserted_at: user.inserted_at
     }
   end
 
-  def public_data(user) do
+  def public_data(user, extras \\ %{}) do
     %{
       id: user.id,
       nickname: user.nickname,
       country: user.country,
       country_code: user.country_code,
       avatar_url: user.avatar_path,
-      rating: user.rating,
+      rating: user.blitz_rating,
+      ratings: ChessDuelBackend.Accounts.User.ratings(user),
       inserted_at: user.inserted_at
     }
+    |> Map.merge(extras)
   end
 
-  def ranking_data(user) do
+  def ranking_data(user, category \\ :blitz) do
     %{
       id: user.id,
       nickname: user.nickname,
       country_code: user.country_code,
       avatar_url: user.avatar_path,
-      rating: user.rating
+      rating: ChessDuelBackend.Accounts.User.rating_for(user, category)
     }
   end
 
