@@ -17,7 +17,7 @@ const statusLabels: Record<PresenceStatus, string> = {
   offline: 'Offline',
   away: 'Ausente',
   dnd: 'Não perturbar',
-  invisible: 'Offline',
+  invisible: 'Invisível',
 }
 </script>
 

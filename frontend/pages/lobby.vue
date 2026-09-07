@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Socket, type Channel } from 'phoenix'
-import { ArrowRight, Brain, Eye, Flame, Monitor, Puzzle, Swords, Trophy } from 'lucide-vue-next'
+import { ArrowRight, Eye, Monitor, Puzzle, Swords, Trophy } from 'lucide-vue-next'
 import type { BroadcastGame, ChessDuelLiveGame, BroadcastsApiResponse, ChessDuelLiveApiResponse } from '~/types/live-games'
 import LobbyBroadcastCard from '~/components/live/BroadcastLiveCard.vue'
 import LobbyChessDuelLiveCard from '~/components/live/ChessDuelLiveCard.vue'
@@ -22,7 +22,11 @@ type RecentGame = {
   time_control: { label: string }
   finished_at: string
 }
-type HistoryResponse = { games: RecentGame[]; pagination: { total: number } }
+type RatingPoint = { category: RatingCategory; rating_before: number; rating_after: number; change: number; recorded_at: string }
+type HistoryResponse = { games: RecentGame[]; pagination: { total: number }; rating_history?: RatingPoint[] }
+type Friend = { id: string; nickname: string; avatar_url: string | null; status: 'online' | 'offline' | 'away' | 'dnd' | 'invisible' }
+type Friendship = { status: 'pending' | 'accepted' | 'declined'; user: Friend }
+type RatingCategory = 'blitz' | 'bullet' | 'rapid'
 
 const timeControls = [
   { id: 'bullet_1_0', label: 'Bullet 1+0' },
@@ -30,6 +34,12 @@ const timeControls = [
   { id: 'blitz_5_0', label: 'Blitz 5+0' },
   { id: 'rapid_10_0', label: 'Rapid 10+0' }
 ] as const
+
+const performanceCategories: Array<{ id: RatingCategory; label: string }> = [
+  { id: 'blitz', label: 'Blitz' },
+  { id: 'bullet', label: 'Bullet' },
+  { id: 'rapid', label: 'Rápidas' },
+]
 
 const presenceOptions: Array<{ id: PresenceStatus; label: string; description: string }> = [
   { id: 'online', label: 'Online agora', description: 'Você aparece disponível.' },
@@ -48,15 +58,24 @@ const matchmakingMessage = ref('')
 const privateRoom = ref<PrivateRoom | null>(null)
 const creatingPrivateRoom = ref(false)
 const copyMessage = ref('')
+const challengeDialogOpen = ref(false)
+const directChallengeSending = ref(false)
+const cancelingChallengeId = ref('')
+const directChallengeError = ref('')
+const directChallengeNotice = ref('')
 const config = useRuntimeConfig()
 const recentGames = ref<RecentGame[]>([])
-const gamesTotal = ref(0)
 const historyLoading = ref(true)
+const selectedPerformanceCategory = ref<RatingCategory>('blitz')
+const performanceHistory = ref<Partial<Record<RatingCategory, HistoryResponse>>>({})
+const performanceLoadingCategory = ref<RatingCategory | null>(null)
 const broadcasts = ref<BroadcastGame[]>([])
 const chessDuelGames = ref<ChessDuelLiveGame[]>([])
 const liveGamesLoading = ref(true)
 const liveGamesError = ref('')
 const liveSource = ref<'broadcast' | 'chessduel'>('broadcast')
+const friends = ref<Friend[]>([])
+const friendsLoading = ref(true)
 const presence = computed(() => auth.presence)
 const presenceOpen = ref(false)
 const presencePicker = ref<HTMLElement | null>(null)
@@ -65,6 +84,7 @@ let liveGamesPollingTimer: ReturnType<typeof setInterval> | null = null
 
 const visibleLiveGames = computed(() => liveSource.value === 'broadcast' ? broadcasts.value : chessDuelGames.value)
 const selectedPresence = computed(() => presenceOptions.find(option => option.id === presence.value) || presenceOptions[0]!)
+const selectedTimeControlLabel = computed(() => timeControls.find(control => control.id === selectedTimeControl.value)?.label || '')
 
 let socket: Socket | null = null
 let channel: Channel | null = null
@@ -77,9 +97,47 @@ const sentChallenges = computed(() => challenges.value.filter(item => item.chall
 const privateRoomLink = computed(() => privateRoom.value && import.meta.client
   ? `${window.location.origin}/room/${privateRoom.value.code}`
   : '')
-const recentWins = computed(() => recentGames.value.filter(game => game.result === 'win').length)
-const recentRatingChange = computed(() => recentGames.value.reduce((total, game) => total + (game.rating_change || 0), 0))
-const recentWinRate = computed(() => recentGames.value.length ? Math.round((recentWins.value / recentGames.value.length) * 100) : 0)
+const selectedPerformance = computed(() => performanceHistory.value[selectedPerformanceCategory.value])
+const performanceGames = computed(() => selectedPerformance.value?.games || [])
+const performanceTotal = computed(() => selectedPerformance.value?.pagination.total || 0)
+const performanceWins = computed(() => performanceGames.value.filter(game => game.result === 'win').length)
+const performanceRatingChange = computed(() => performanceGames.value.reduce((total, game) => total + (game.rating_change || 0), 0))
+const performanceWinRate = computed(() => performanceGames.value.length ? Math.round((performanceWins.value / performanceGames.value.length) * 100) : 0)
+const performanceRating = computed(() => auth.user?.ratings?.[selectedPerformanceCategory.value] ?? '—')
+const performanceCategoryLabel = computed(() => performanceCategories.find(category => category.id === selectedPerformanceCategory.value)?.label || '')
+const performanceChart = computed(() => {
+  const history = selectedPerformance.value?.rating_history || []
+  const currentRating = performanceRating.value
+  const values = history.length
+    ? [history[0]!.rating_before, ...history.map(point => point.rating_after)]
+    : typeof currentRating === 'number' ? [currentRating, currentRating] : []
+
+  if (!values.length) return { points: '', areaPoints: '', min: 0, max: 0, lastX: 0, lastY: 0, changes: 0 }
+
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const padding = min === max ? 10 : 0
+  const low = min - padding
+  const high = max + padding
+  const span = Math.max(high - low, 1)
+  const coordinates = values.map((rating, index) => ({
+    x: 4 + (index / Math.max(values.length - 1, 1)) * 312,
+    y: 76 - ((rating - low) / span) * 68,
+  }))
+  const points = coordinates.map(point => `${point.x},${point.y}`).join(' ')
+  const last = coordinates.at(-1)!
+
+  return {
+    points,
+    areaPoints: `4,76 ${points} 316,76`,
+    min,
+    max,
+    lastX: last.x,
+    lastY: last.y,
+    changes: history.length,
+  }
+})
+const acceptedFriends = computed(() => friends.value.filter(friend => friend.id !== auth.user?.id))
 const resultLabels: Record<RecentGame['result'], string> = {
   win: 'Vitória',
   loss: 'Derrota',
@@ -99,6 +157,8 @@ onMounted(async () => {
   if (!currentUser) return
 
   void loadDashboardHistory()
+  void loadPerformanceHistory(selectedPerformanceCategory.value)
+  void loadFriends()
   void fetchLiveGames(true)
   liveGamesPollingTimer = setInterval(() => {
     void fetchLiveGames(false)
@@ -161,14 +221,35 @@ async function loadDashboardHistory() {
       query: { page: 1, per_page: 5 }
     })
     recentGames.value = response.games
-    gamesTotal.value = response.pagination.total
   } catch {
     recentGames.value = []
-    gamesTotal.value = 0
   } finally {
     historyLoading.value = false
   }
 }
+
+async function loadPerformanceHistory(category: RatingCategory) {
+  if (!auth.token || performanceHistory.value[category]) return
+
+  performanceLoadingCategory.value = category
+  try {
+    const response = await $fetch<HistoryResponse>('/api/users/me/games', {
+      baseURL: config.public.api.baseURL,
+      headers: { Authorization: `Bearer ${auth.token}` },
+      query: { page: 1, per_page: 5, category },
+    })
+    performanceHistory.value = { ...performanceHistory.value, [category]: response }
+  } catch {
+    performanceHistory.value = {
+      ...performanceHistory.value,
+      [category]: { games: [], pagination: { total: 0 } },
+    }
+  } finally {
+    if (performanceLoadingCategory.value === category) performanceLoadingCategory.value = null
+  }
+}
+
+watch(selectedPerformanceCategory, category => { void loadPerformanceHistory(category) })
 
 function relativeDate(value: string) {
   const elapsed = Date.now() - new Date(value).getTime()
@@ -230,6 +311,11 @@ onBeforeUnmount(() => {
 function applyLobbyState(state: LobbyState) {
   users.value = state.users
   challenges.value = state.challenges
+  const liveStatuses = new Map(state.users.map(user => [user.id, user.status]))
+  friends.value = friends.value.map(friend => ({
+    ...friend,
+    status: liveStatuses.get(friend.id) || 'offline',
+  }))
   connectionReady.value = true
   status.value = selectedPresence.value.label
   errorMessage.value = ''
@@ -248,9 +334,9 @@ function closePresenceMenu(event: PointerEvent) {
   if (!presencePicker.value?.contains(event.target as Node)) presenceOpen.value = false
 }
 
-function challenge(userId: string) {
-  channel?.push('challenge', { user_id: userId, time_control: selectedTimeControl.value })
-    .receive('error', showChannelError)
+function challengeByNickname(player: Friend) {
+  challengeDialogOpen.value = false
+  void navigateTo({ path: '/play', query: { opponent: player.nickname } })
 }
 
 function startMatchmaking() {
@@ -305,6 +391,20 @@ async function enterPrivateGame(match: { game_id: string }) {
   await navigateTo(`/game/${match.game_id}/live`)
 }
 
+async function loadFriends() {
+  try {
+    const data = await $fetch<{ friendships: Friendship[] }>('/api/friendships', {
+      baseURL: config.public.api.baseURL,
+      headers: { Authorization: `Bearer ${auth.token}` }
+    })
+    friends.value = data.friendships.filter(friendship => friendship.status === 'accepted').map(friendship => friendship.user)
+  } catch {
+    friends.value = []
+  } finally {
+    friendsLoading.value = false
+  }
+}
+
 function accept(challengeId: string) {
   channel?.push('accept_challenge', { challenge_id: challengeId })
     .receive('error', showChannelError)
@@ -315,7 +415,28 @@ function decline(challengeId: string) {
     .receive('error', showChannelError)
 }
 
+function cancelSentChallenge(challengeId: string) {
+  if (!channel || cancelingChallengeId.value) return
+
+  cancelingChallengeId.value = challengeId
+  directChallengeNotice.value = ''
+  channel.push('cancel_challenge', { challenge_id: challengeId })
+    .receive('ok', () => {
+      challenges.value = challenges.value.filter(challenge => challenge.id !== challengeId)
+      cancelingChallengeId.value = ''
+      directChallengeNotice.value = 'Desafio removido.'
+    })
+    .receive('error', (error: { reason?: string }) => {
+      cancelingChallengeId.value = ''
+      showChannelError(error)
+    })
+}
+
 function showChannelError(error: { reason?: string }) {
+  errorMessage.value = channelErrorMessage(error.reason)
+}
+
+function channelErrorMessage(reason?: string) {
   const messages: Record<string, string> = {
     user_offline: 'Esse jogador saiu do salao.',
     user_unavailable: 'Esse jogador não está recebendo desafios agora.',
@@ -324,13 +445,11 @@ function showChannelError(error: { reason?: string }) {
     challenge_not_found: 'Esse desafio nao esta mais disponivel.',
     invalid_time_control: 'Escolha um formato de tempo válido.',
     queue_unavailable: 'A fila está indisponível no momento.',
-    room_unavailable: 'As salas privadas estão indisponíveis no momento.'
+    room_unavailable: 'As salas privadas estão indisponíveis no momento.',
+    user_not_found: 'Esse jogador não está disponível.',
+    cannot_challenge_yourself: 'Você não pode desafiar a si mesmo.'
   }
-  errorMessage.value = messages[error.reason || ''] || 'Nao foi possivel concluir a acao.'
-}
-
-function challengeSentTo(userId: string) {
-  return sentChallenges.value.some(item => item.challenged.id === userId)
+  return messages[reason || ''] || 'Nao foi possivel concluir a acao.'
 }
 
 function avatarUrl(user: LobbyUser | null | undefined) {
@@ -387,11 +506,12 @@ async function logOut() {
         </label>
         <button v-if="!searchingMatch" class="search" type="button" @click="startMatchmaking">Buscar partida</button>
         <button v-else class="cancel-search" type="button" @click="cancelMatchmaking">Cancelar busca</button>
-        <button class="private-room-button" type="button" :disabled="creatingPrivateRoom || searchingMatch" @click="createPrivateRoom">
-          {{ creatingPrivateRoom ? 'Criando convite…' : 'Convidar amigo' }}
+        <button class="private-room-button" type="button" :disabled="!connectionReady || searchingMatch" @click="challengeDialogOpen = true; directChallengeError = ''">
+          Desafie alguém
         </button>
       </section>
       <p v-if="matchmakingMessage" class="inline-status"><span />{{ matchmakingMessage }}</p>
+      <p v-if="directChallengeNotice" class="inline-status"><span />{{ directChallengeNotice }}</p>
       <section v-if="privateRoom" class="invite-result" aria-live="polite">
         <span>Aguardando seu amigo em {{ privateRoom.time_control.label }}</span>
         <input :value="privateRoomLink" readonly aria-label="Link da sala privada" @focus="($event.target as HTMLInputElement).select()">
@@ -443,7 +563,7 @@ async function logOut() {
         <div v-if="receivedChallenges.length" class="list">
           <article v-for="item in receivedChallenges" :key="item.id" class="player-row">
             <ProfilePresenceAvatar :name="item.challenger.nickname" :avatar-url="item.challenger.avatar_url" :status="item.challenger.status" :size="40" />
-            <div><NuxtLink class="player-link" :to="`/profile/${encodeURIComponent(item.challenger.nickname)}`"><strong>{{ item.challenger.nickname }}</strong></NuxtLink><small>Rating {{ item.challenger.rating }} · {{ item.time_control.label }}</small></div>
+            <div><NuxtLink class="player-link" :to="`/user/${encodeURIComponent(item.challenger.nickname)}`"><strong>{{ item.challenger.nickname }}</strong></NuxtLink><small>Rating {{ item.challenger.rating }} · {{ item.time_control.label }}</small></div>
             <div class="actions"><button class="accept" :disabled="searchingMatch" @click="accept(item.id)">Aceitar</button><button class="decline" @click="decline(item.id)">Recusar</button></div>
           </article>
         </div>
@@ -451,7 +571,7 @@ async function logOut() {
 
       <section v-if="sentChallenges.length" class="panel compact">
         <h2>Desafios enviados</h2>
-        <p v-for="item in sentChallenges" :key="item.id">Aguardando resposta de <strong>{{ item.challenged.nickname }}</strong> · {{ item.time_control.label }}.</p>
+        <div v-for="item in sentChallenges" :key="item.id" class="sent-challenge-row"><p>Aguardando resposta de <strong>{{ item.challenged.nickname }}</strong> · {{ item.time_control.label }}.</p><button type="button" :disabled="!!cancelingChallengeId" @click="cancelSentChallenge(item.id)">{{ cancelingChallengeId === item.id ? 'Removendo…' : 'Remover' }}</button></div>
       </section>
 
       <section class="dashboard-grid" aria-label="Resumo da sua atividade">
@@ -463,27 +583,74 @@ async function logOut() {
             <NuxtLink v-for="game in recentGames.slice(0, 3)" :key="game.id" :to="`/game/${game.id}/review`" class="recent-row">
               <span class="result-pill" :class="game.result">{{ resultLabels[game.result] }}</span>
               <span><strong>vs {{ game.opponent.nickname }}</strong><small>{{ game.time_control.label }}</small></span>
-              <span class="recent-meta"><strong :class="{ positive: (game.rating_change || 0) > 0, negative: (game.rating_change || 0) < 0 }">{{ game.rating_change === null ? 'Casual' : game.rating_change > 0 ? `+${game.rating_change}` : game.rating_change }}</strong><small>{{ relativeDate(game.finished_at) }}</small></span>
+              <span class="recent-meta"><strong v-if="game.rating_change !== null" :class="{ positive: game.rating_change > 0, negative: game.rating_change < 0 }">{{ game.rating_change > 0 ? `+${game.rating_change}` : game.rating_change }}</strong><small>{{ relativeDate(game.finished_at) }}</small></span>
             </NuxtLink>
           </div>
         </article>
 
-        <article class="panel performance-panel">
+        <article class="panel performance-panel" :aria-busy="performanceLoadingCategory === selectedPerformanceCategory">
           <header class="widget-heading"><h2>Seu desempenho</h2><Trophy :size="20" aria-hidden="true" /></header>
+          <div class="performance-tabs" role="tablist" aria-label="Modalidade do desempenho">
+            <button
+              v-for="category in performanceCategories"
+              :key="category.id"
+              type="button"
+              role="tab"
+              :aria-selected="selectedPerformanceCategory === category.id"
+              :class="{ active: selectedPerformanceCategory === category.id }"
+              @click="selectedPerformanceCategory = category.id"
+            >
+              <GameCategoryIcon :category="category.id" :size="17" />
+              {{ category.label }}
+            </button>
+          </div>
           <span class="metric-label">Rating atual</span>
-          <div class="rating-value"><strong>{{ auth.user?.rating ?? '—' }}</strong><span :class="{ positive: recentRatingChange > 0, negative: recentRatingChange < 0 }">{{ recentRatingChange > 0 ? `+${recentRatingChange}` : recentRatingChange }}</span></div>
-          <small class="sample-note">Variação nas últimas {{ recentGames.length }} partidas exibidas</small>
-          <dl class="performance-stats"><div><dt>Partidas</dt><dd>{{ gamesTotal }}</dd></div><div><dt>Vitórias recentes</dt><dd>{{ recentWins }}</dd></div><div><dt>Aproveitamento</dt><dd>{{ recentWinRate }}%</dd></div></dl>
+          <div class="rating-value"><strong>{{ performanceRating }}</strong><span :class="{ positive: performanceRatingChange > 0, negative: performanceRatingChange < 0 }">{{ performanceRatingChange > 0 ? `+${performanceRatingChange}` : performanceRatingChange }}</span></div>
+          <small class="sample-note">Variação nas últimas {{ performanceGames.length }} partidas de {{ performanceCategoryLabel }}</small>
+          <div class="performance-chart">
+            <svg viewBox="0 0 320 80" role="img" :aria-label="`Evolução do rating em ${performanceCategoryLabel}`" preserveAspectRatio="none">
+              <line x1="4" y1="8" x2="316" y2="8" />
+              <line x1="4" y1="42" x2="316" y2="42" />
+              <line x1="4" y1="76" x2="316" y2="76" />
+              <polygon v-if="performanceChart.areaPoints" :points="performanceChart.areaPoints" />
+              <polyline v-if="performanceChart.points" :points="performanceChart.points" />
+              <circle v-if="performanceChart.points" :cx="performanceChart.lastX" :cy="performanceChart.lastY" r="3.5" />
+            </svg>
+            <div><span>{{ performanceChart.min || '—' }}</span><span>{{ performanceChart.changes ? `${performanceChart.changes} mudanças` : 'Sem mudanças' }}</span><span>{{ performanceChart.max || '—' }}</span></div>
+          </div>
+          <dl class="performance-stats"><div><dt>Partidas</dt><dd>{{ performanceTotal }}</dd></div><div><dt>Vitórias recentes</dt><dd>{{ performanceWins }}</dd></div><div><dt>Aproveitamento</dt><dd>{{ performanceWinRate }}%</dd></div></dl>
         </article>
 
-        <article class="panel training-panel">
-          <header class="widget-heading"><h2>Treino tático</h2><NuxtLink to="/puzzles">Ver hub</NuxtLink></header>
-          <NuxtLink to="/puzzles/session?mode=classic"><Brain :size="21" aria-hidden="true" /><span><strong>Modo Clássico</strong><small>Resolva no seu ritmo</small></span><ArrowRight :size="18" aria-hidden="true" /></NuxtLink>
-          <NuxtLink to="/puzzles/session?mode=rush&duration=180"><Flame :size="21" aria-hidden="true" /><span><strong>Corrida de problemas</strong><small>Velocidade e precisão</small></span><ArrowRight :size="18" aria-hidden="true" /></NuxtLink>
-          <NuxtLink to="/puzzles/battle/180"><Swords :size="21" aria-hidden="true" /><span><strong>Batalha de problemas</strong><small>Enfrente outro jogador</small></span><ArrowRight :size="18" aria-hidden="true" /></NuxtLink>
+        <article class="panel friends-panel">
+          <header class="widget-heading"><h2> Amigos <span class="friends-count">{{ acceptedFriends.length }}</span></h2><NuxtLink to="/social/friends">Ver todos</NuxtLink></header>
+          <p v-if="friendsLoading" class="widget-state">Carregando amigos…</p>
+          <div v-else-if="acceptedFriends.length" class="friends-grid">
+            <NuxtLink v-for="friend in acceptedFriends.slice(0, 6)" :key="friend.id" class="friend-card" :to="`/user/${encodeURIComponent(friend.nickname)}`">
+              <ProfilePresenceAvatar :name="friend.nickname" :avatar-url="friend.avatar_url" :status="friend.status" :size="52" />
+              <strong>{{ friend.nickname }}</strong>
+            </NuxtLink>
+          </div>
+          <NuxtLink v-else class="friends-empty" to="/social/friends">
+            <strong>Encontre seus amigos</strong>
+            <span>Adicione jogadores para vê-los aqui.</span>
+          </NuxtLink>
         </article>
       </section>
     </div>
+    <ChallengesChallengePlayerDialog
+      :open="challengeDialogOpen"
+      :time-control-label="selectedTimeControlLabel"
+      :challenge-ready="connectionReady"
+      :challenge-busy="directChallengeSending"
+      :challenge-error="directChallengeError"
+      :creating-link="creatingPrivateRoom"
+      :invite-link="privateRoomLink"
+      :copy-message="copyMessage"
+      @close="challengeDialogOpen = false"
+      @challenge="challengeByNickname"
+      @create-link="createPrivateRoom"
+      @copy-link="copyPrivateRoomLink"
+    />
   </main>
 </template>
 
@@ -526,8 +693,10 @@ button { color: var(--text); background: var(--surface-strong); border-color: va
 @media (max-width: 1100px) { .mode-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .lobby-shell { min-height: calc(100vh - 64px); }.content { padding: 1rem; }.welcome p { display: block; }.mode-grid { grid-template-columns: 1fr; }.mode-card { min-height: 132px; }.matchmaking-panel .time-control { justify-content: stretch; } }
 .dashboard-grid { display: grid; grid-template-columns: 1.12fr .9fr .98fr; gap: 1rem; }.dashboard-grid .panel { min-width: 0; }.widget-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.1rem; }.widget-heading h2 { font-size: 1.05rem; }.widget-heading a { padding: .38rem .58rem; color: var(--accent); border: 1px solid var(--border); border-radius: 7px; font-size: .72rem; text-decoration: none; }.widget-heading svg { color: var(--accent); }.widget-state { min-height: 128px; display: grid; place-items: center; margin: 0; color: var(--text-muted); text-align: center; }.recent-list { display: grid; }.recent-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; gap: .75rem; padding: .7rem 0; color: var(--text); border-bottom: 1px solid var(--border-subtle); text-decoration: none; }.recent-row:last-child { border-bottom: 0; }.recent-row:hover strong:first-child { color: var(--accent); }.recent-row > span:not(.result-pill) { display: grid; gap: .18rem; }.recent-row small { color: var(--text-muted); font-size: .7rem; }.result-pill { padding: .42rem .5rem; border-radius: 6px; font-size: .7rem; font-weight: 700; text-align: center; }.result-pill.win { color: var(--success); background: var(--success-soft); }.result-pill.loss { color: var(--danger); background: var(--danger-soft); }.result-pill.draw { color: var(--text-muted); background: var(--surface-strong); }.recent-meta { justify-items: end; }.positive { color: var(--success) !important; }.negative { color: var(--danger) !important; }.metric-label, .sample-note { color: var(--text-muted); }.rating-value { display: flex; align-items: baseline; gap: .65rem; margin: .35rem 0; }.rating-value > strong { font-size: 2.5rem; letter-spacing: -.05em; }.rating-value > span { color: var(--text-muted); font-weight: 700; }.sample-note { font-size: .7rem; }.performance-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin: 1.35rem 0 0; padding-top: 1rem; border-top: 1px solid var(--border-subtle); }.performance-stats div { display: grid; justify-items: center; gap: .28rem; border-right: 1px solid var(--border-subtle); }.performance-stats div:last-child { border: 0; }.performance-stats dt { color: var(--text-muted); font-size: .7rem; text-align: center; }.performance-stats dd { margin: 0; font-size: 1.15rem; font-weight: 700; }.training-panel > a { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .75rem; padding: .72rem; color: var(--text); border-bottom: 1px solid var(--border-subtle); text-decoration: none; }.training-panel > a:last-child { border: 0; }.training-panel > a:hover { background: var(--surface-hover); border-radius: 8px; }.training-panel > a > svg { color: var(--accent); }.training-panel > a span { display: grid; gap: .15rem; }.training-panel > a small { color: var(--text-muted); }
-@media (max-width: 1050px) { .dashboard-grid { grid-template-columns: 1fr 1fr; }.training-panel { grid-column: 1 / -1; } }
-@media (max-width: 700px) { .dashboard-grid { grid-template-columns: 1fr; }.training-panel { grid-column: auto; }.recent-row { grid-template-columns: 68px minmax(0, 1fr); }.recent-meta { grid-column: 2; grid-auto-flow: column; justify-content: space-between; justify-items: start; } }
+.performance-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; margin: -.25rem 0 1rem; }.performance-tabs button { display: flex; min-width: 0; min-height: 34px; align-items: center; justify-content: center; gap: .35rem; padding: .42rem .35rem; color: var(--text-muted); background: var(--surface-strong); border: 1px solid var(--border-subtle); border-radius: 7px; font-size: .7rem; font-weight: 700; }.performance-tabs button:hover { color: var(--text); border-color: var(--accent); transform: none; }.performance-tabs button.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }.performance-panel[aria-busy="true"] .rating-value,.performance-panel[aria-busy="true"] .sample-note,.performance-panel[aria-busy="true"] .performance-chart,.performance-panel[aria-busy="true"] .performance-stats { opacity: .55; }
+.performance-chart { margin-top: .8rem; padding: .35rem .45rem .3rem; background: color-mix(in srgb, var(--surface-strong) 72%, transparent); border: 1px solid var(--border-subtle); border-radius: 8px; }.performance-chart svg { display: block; width: 100%; height: 72px; overflow: visible; }.performance-chart line { stroke: var(--border-subtle); stroke-width: 1; stroke-dasharray: 3 5; }.performance-chart polygon { fill: color-mix(in srgb, var(--accent) 13%, transparent); }.performance-chart polyline { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }.performance-chart circle { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; }.performance-chart > div { display: flex; justify-content: space-between; gap: .5rem; color: var(--text-muted); font-size: .62rem; }.performance-chart + .performance-stats { margin-top: .8rem; }
+@media (max-width: 1050px) { .dashboard-grid { grid-template-columns: 1fr 1fr; }.friends-panel { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .dashboard-grid { grid-template-columns: 1fr; }.friends-panel { grid-column: auto; }.recent-row { grid-template-columns: 68px minmax(0, 1fr); }.recent-meta { grid-column: 2; grid-auto-flow: column; justify-content: space-between; justify-items: start; } }
 .mode-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; padding-bottom: .8rem; }.mode-card { min-height: 82px; grid-template-columns: auto 1fr; gap: .8rem; padding: .85rem 1rem; box-shadow: none; }.mode-card span { gap: .2rem; }.mode-card small { font-size: .72rem; line-height: 1.3; }.matchmaking-panel { grid-template-columns: 1fr auto auto auto; padding: 1rem 1.15rem; }.matchmaking-panel h2 { font-size: 1rem; }.matchmaking-panel p { font-size: .78rem; }.private-room-button { color: var(--text); background: var(--surface-strong); border-color: var(--border); }.private-room-button:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); border-color: var(--accent); }.live-games-section { display: grid; gap: .8rem; padding: .2rem 0; scroll-margin-top: 96px; }.live-heading { display: flex; align-items: center; justify-content: space-between; }.live-heading p { display: flex; align-items: center; gap: .5rem; margin: 0; }.live-heading p > span { width: 7px; height: 7px; background: var(--success); border-radius: 50%; box-shadow: 0 0 7px var(--success); }.live-heading small { color: var(--text-muted); }.live-empty { display: grid; min-height: 280px; place-items: center; align-content: center; gap: .6rem; padding: 2rem; color: var(--text-muted); text-align: center; background: linear-gradient(145deg,var(--surface),color-mix(in srgb,var(--surface-strong) 55%,var(--surface))); border: 1px solid var(--border-subtle); border-radius: 12px; }.live-empty svg { color: var(--accent); }.live-empty strong { color: var(--text); }.live-empty p { max-width: 520px; margin: 0; line-height: 1.55; }.room-waiting { grid-column: 1 / -1; }
 @media (max-width: 900px) { .mode-grid { grid-template-columns: repeat(2, 1fr); }.matchmaking-panel { grid-template-columns: 1fr 1fr; }.matchmaking-panel > div:first-child { grid-column: 1 / -1; }.matchmaking-panel .time-control { justify-content: stretch; }.matchmaking-panel select { flex: 1; } }
 @media (max-width: 560px) { .mode-grid { grid-template-columns: 1fr; }.mode-card { min-height: 68px; }.matchmaking-panel { grid-template-columns: 1fr; }.matchmaking-panel > div:first-child { grid-column: auto; }.live-empty { min-height: 230px; }.live-heading small { display: none; } }
@@ -551,4 +720,10 @@ button { color: var(--text); background: var(--surface-strong); border-color: va
 .live-heading .live-section-badge { width: max-content; gap: .3rem; padding: .28rem .5rem; color: var(--danger); background: var(--danger-soft); border-radius: 999px; font-size: .68rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .live-heading .live-section-badge > span { width: auto; height: auto; color: var(--danger); background: transparent; border-radius: 0; box-shadow: none; font-size: .62rem; line-height: 1; }
 .live-heading .live-section-badge > strong { color: var(--danger); font-size: inherit; }
+.friends-count { display: inline-grid; min-width: 1.35rem; height: 1.35rem; place-items: center; padding: 0 .25rem; color: var(--text-muted); background: var(--surface-strong); border-radius: 999px; font-size: .72rem; vertical-align: middle; }
+.friends-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem .75rem; }
+.friend-card { display: grid; justify-items: center; gap: .35rem; min-width: 0; color: var(--text); text-align: center; text-decoration: none; }.friend-card strong { overflow: hidden; max-width: 100%; color: var(--text); font-size: .75rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }.friend-card:hover strong { color: var(--accent); }
+.friends-empty { display: grid; min-height: 128px; place-items: center; align-content: center; gap: .35rem; color: var(--text); text-align: center; text-decoration: none; border: 1px dashed var(--border); border-radius: 10px; }.friends-empty span { color: var(--text-muted); font-size: .78rem; }.friends-empty:hover strong { color: var(--accent); }
+.sent-challenge-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 0; border-top: 1px solid var(--border-subtle); }.sent-challenge-row:first-of-type { margin-top: .8rem; }.sent-challenge-row p { margin: 0; }.sent-challenge-row button { flex: 0 0 auto; padding: .5rem .75rem; color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); font-weight: 750; }
+@media (max-width: 560px) { .sent-challenge-row { align-items: stretch; flex-direction: column; }.sent-challenge-row button { width: 100%; } }
 </style>

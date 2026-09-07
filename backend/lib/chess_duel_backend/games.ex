@@ -121,12 +121,15 @@ defmodule ChessDuelBackend.Games do
   def list_finished_games_for_user(user_id, opts \\ []) when is_binary(user_id) do
     page = opts |> Keyword.get(:page, 1) |> max(1)
     per_page = opts |> Keyword.get(:per_page, 10) |> max(1) |> min(50)
+    category = Keyword.get(opts, :category)
 
     base_query =
-      from game in Game,
+      from(game in Game,
         where: game.status == "finished",
         where: game.white_player_id == ^user_id or game.black_player_id == ^user_id,
         where: not is_nil(game.finished_at)
+      )
+      |> filter_history_category(category)
 
     total = Repo.aggregate(base_query, :count, :id)
 
@@ -151,6 +154,22 @@ defmodule ChessDuelBackend.Games do
     }
   end
 
+  defp filter_history_category(query, :bullet),
+    do: where(query, [game], game.initial_time_ms == 60_000 and game.increment_ms == 0)
+
+  defp filter_history_category(query, :rapid),
+    do: where(query, [game], game.initial_time_ms == 600_000 and game.increment_ms == 0)
+
+  defp filter_history_category(query, :blitz),
+    do:
+      where(
+        query,
+        [game],
+        game.increment_ms == 0 and game.initial_time_ms in [180_000, 300_000]
+      )
+
+  defp filter_history_category(query, _category), do: query
+
   def public_stats_for_user(user_id) when is_binary(user_id) do
     games =
       from(g in Game,
@@ -173,6 +192,68 @@ defmodule ChessDuelBackend.Games do
     }
   end
 
+  def detailed_stats_for_user(user_id) when is_binary(user_id) do
+    games =
+      from(g in Game,
+        where:
+          g.status == "finished" and
+            (g.white_player_id == ^user_id or g.black_player_id == ^user_id),
+        order_by: [asc: g.finished_at]
+      )
+      |> Repo.all()
+
+    entries = history_entries(games, user_id)
+    results = Enum.map(entries, & &1.result)
+
+    %{
+      total_games: length(entries),
+      win_rate: win_rate(results),
+      current_streak: current_streak(results),
+      best_win_streak: best_win_streak(results),
+      by_category: grouped_rates(entries, &(&1.rating_category || category_for(&1.time_control))),
+      by_color: grouped_rates(entries, & &1.color),
+      by_end_reason: Enum.frequencies_by(entries, &normalize_end_reason/1)
+    }
+  end
+
+  def rating_history_for_user(user_id, opts \\ []) when is_binary(user_id) do
+    category = Keyword.get(opts, :category)
+    limit = Keyword.get(opts, :limit)
+
+    query =
+      from(change in RatingChange,
+        where: change.user_id == ^user_id,
+        select: %{
+          category: change.category,
+          rating_before: change.rating_before,
+          rating_after: change.rating_after,
+          change: change.change,
+          recorded_at: change.inserted_at
+        }
+      )
+      |> maybe_filter_rating_category(category)
+      |> order_and_limit_rating_history(limit)
+
+    entries = Repo.all(query)
+    if is_integer(limit), do: Enum.reverse(entries), else: entries
+  end
+
+  defp maybe_filter_rating_category(query, category)
+       when category in [:bullet, :blitz, :rapid],
+       do: where(query, [change], change.category == ^category)
+
+  defp maybe_filter_rating_category(query, _category), do: query
+
+  defp order_and_limit_rating_history(query, limit) when is_integer(limit) and limit > 0 do
+    query
+    |> order_by([change], desc: change.inserted_at, desc: change.id)
+    |> limit(^limit)
+  end
+
+  defp order_and_limit_rating_history(query, _limit) do
+    order_by(query, [change], asc: change.inserted_at, asc: change.id)
+  end
+
   defp current_streak([]), do: 0
 
   defp current_streak(results) do
@@ -180,6 +261,49 @@ defmodule ChessDuelBackend.Games do
     count = results |> Enum.reverse() |> Enum.take_while(&(&1 == latest)) |> length()
     if latest == "win", do: count, else: -count
   end
+
+  defp win_rate([]), do: 0
+
+  defp win_rate(results),
+    do: Float.round(Enum.count(results, &(&1 == "win")) * 100 / length(results), 1)
+
+  defp best_win_streak(results) do
+    {best, current} =
+      Enum.reduce(results, {0, 0}, fn
+        "win", {best, current} -> {max(best, current + 1), current + 1}
+        _, {best, _current} -> {best, 0}
+      end)
+
+    max(best, current)
+  end
+
+  defp grouped_rates(entries, key_fun) do
+    entries
+    |> Enum.group_by(key_fun)
+    |> Map.new(fn {key, rows} ->
+      results = Enum.map(rows, & &1.result)
+
+      {key,
+       %{
+         total: length(rows),
+         wins: Enum.count(results, &(&1 == "win")),
+         win_rate: win_rate(results)
+       }}
+    end)
+  end
+
+  defp category_for(%{id: id}) when id in ~w(bullet_1_0), do: :bullet
+  defp category_for(%{id: id}) when id in ~w(rapid_10_0), do: :rapid
+  defp category_for(_), do: :blitz
+
+  defp normalize_end_reason(%{result: "draw"}), do: "draw"
+
+  defp normalize_end_reason(%{end_reason: reason})
+       when reason in ["checkmate", "timeout", "abandonment"],
+       do: reason
+
+  defp normalize_end_reason(%{end_reason: reason}) when is_binary(reason), do: reason
+  defp normalize_end_reason(_), do: "other"
 
   defp history_entries([], _user_id), do: []
 

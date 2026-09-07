@@ -3,6 +3,7 @@ import Config
 config :chess_duel_backend, :game_preparation_ms, 0
 config :chess_duel_backend, :puzzle_battle_countdown_ms, 0
 config :chess_duel_backend, :puzzle_rush_countdown_ms, 0
+config :chess_duel_backend, :puzzle_rush_prefetch, false
 config :chess_duel_backend, :lichess_broadcasts, auto_refresh: false
 
 # Only in tests, remove the complexity from the password hashing algorithm

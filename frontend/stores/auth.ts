@@ -10,6 +10,7 @@ export type AuthUser = {
   rating: number
   ratings: PlayerRatings
   inserted_at: string
+  birth_date: string | null
 }
 
 export type PlayerRatings = { bullet: number; blitz: number; rapid: number }
@@ -82,14 +83,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(email: string, password: string, nickname: string) {
+  async function register(email: string, password: string, nickname: string, birthDate: string) {
     error.value = ''
 
     try {
       const response = await $fetch<RegistrationResponse>('/api/users/register', {
         baseURL: config.public.api.baseURL,
         method: 'POST',
-        body: { user: { email, password, nickname } }
+        body: { user: { email, password, nickname, birth_date: birthDate || null } }
       })
 
       return response.status === 'pending_confirmation'
@@ -200,7 +201,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function updateProfile(nickname: string, countryCode: string, country: string) {
+  async function updateProfile(nickname: string, countryCode: string, country: string, birthDate?: string) {
     error.value = ''
 
     if (!token.value) {
@@ -212,7 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
         baseURL: config.public.api.baseURL,
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token.value}` },
-        body: { user: { nickname, country_code: countryCode || null, country: country || null } }
+        body: { user: { nickname, country_code: countryCode || null, country: country || null, birth_date: birthDate || null } }
       })
 
       user.value = response.user

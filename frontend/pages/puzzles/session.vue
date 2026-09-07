@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Chess, type Color as ChessColor, type Square } from 'chess.js'
 import type { Color, Key } from '@lichess-org/chessground/types'
+import { Socket, type Channel } from 'phoenix'
 import { Check, Clock3, Flame, Heart, RefreshCw, Target, X } from 'lucide-vue-next'
 import { readBoardLayoutSize, writeBoardLayoutSize, type BoardLayoutSize } from '~/utils/boardLayout'
 import { soundForSan } from '~/utils/gameSound'
@@ -45,6 +46,8 @@ const boardLayoutSize = ref<BoardLayoutSize>('standard')
 let chess: Chess | null = null
 let timer: ReturnType<typeof setInterval> | null = null
 let countdownTimer: ReturnType<typeof setInterval> | null = null
+let rushSocket: Socket | null = null
+let rushChannel: Channel | null = null
 
 const boardDisabled = computed(() => loading.value || submitting.value || rushCountdown.value > 0 || !puzzle.value || ['solved', 'failed', 'expired'].includes(feedback.value))
 const formattedTime = computed(() => {
@@ -66,11 +69,14 @@ onMounted(async () => {
   if (mode.value === 'rush') {
     sessionStorage.removeItem(rushStorageKey())
     remainingMs.value = rushDuration.value * 1_000
+    connectRushSocket()
   } else await loadTrainingPuzzle()
 })
 onBeforeUnmount(() => {
   stopTimer()
   if (countdownTimer) clearInterval(countdownTimer)
+  rushChannel?.leave()
+  rushSocket?.disconnect()
 })
 
 async function loadTrainingPuzzle() {
@@ -104,6 +110,7 @@ async function startRush() {
   }
   applyRushState(result.data, false)
   sessionStorage.setItem(rushStorageKey(), result.data.session_id)
+  await joinRushChannel(result.data.session_id)
   loading.value = false
   await runRushCountdown(result.data.preparation_remaining_ms)
   syncRushClock(rushDuration.value * 1_000)
@@ -144,18 +151,48 @@ async function handleMove(move: { from: Key; to: Key; promotion?: 'q' }) {
   feedback.value = 'idle'
   errorMessage.value = ''
   const path = mode.value === 'classic' ? `/api/puzzles/${puzzle.value.id}/attempt` : `/api/puzzle_rush/${rushSessionId.value}/attempt`
-  const result = await request<AttemptResult | RushAttempt>(path, {
-    method: 'POST', headers: authorizationHeaders(),
-    body: { from: move.from, to: move.to, promotion: move.promotion, index: expectedIndex.value }
-  })
+  const payload = { from: move.from, to: move.to, promotion: move.promotion, index: expectedIndex.value }
+  const data = mode.value === 'rush' && rushChannel
+    ? await pushRushAttempt(payload)
+    : (await request<AttemptResult | RushAttempt>(path, {
+        method: 'POST', headers: authorizationHeaders(), body: payload
+      })).data
   submitting.value = false
-  if (!result.data) {
+  if (!data) {
     restorePosition(previousFen, previousLastMove)
     errorMessage.value = 'Não foi possível validar o lance. Tente novamente.'
     return
   }
-  if (mode.value === 'rush') handleRushResult(result.data as RushAttempt, previousFen, previousLastMove)
-  else handleTrainingResult(result.data as AttemptResult, previousFen, previousLastMove)
+  if (mode.value === 'rush') handleRushResult(data as RushAttempt, previousFen, previousLastMove)
+  else handleTrainingResult(data as AttemptResult, previousFen, previousLastMove)
+}
+
+function connectRushSocket() {
+  if (rushSocket || !auth.token) return
+  const websocketUrl = `${useRuntimeConfig().public.api.baseURL.replace(/^http/, 'ws').replace(/\/$/, '')}/socket`
+  rushSocket = new Socket(websocketUrl, { params: { token: auth.token } })
+  rushSocket.connect()
+}
+
+function joinRushChannel(sessionId: string) {
+  if (!rushSocket) return Promise.resolve()
+  rushChannel?.leave()
+  rushChannel = rushSocket.channel(`puzzle_rush:${sessionId}`, {})
+  return new Promise<void>((resolve) => {
+    rushChannel?.join()
+      .receive('ok', () => resolve())
+      .receive('error', () => { rushChannel = null; resolve() })
+      .receive('timeout', () => { rushChannel = null; resolve() })
+  })
+}
+
+function pushRushAttempt(payload: { from: Key; to: Key; promotion?: 'q'; index: number }) {
+  return new Promise<RushAttempt | null>((resolve) => {
+    rushChannel?.push('attempt', payload, 4_000)
+      .receive('ok', (reply: RushAttempt) => resolve(reply))
+      .receive('error', () => resolve(null))
+      .receive('timeout', () => resolve(null))
+  })
 }
 
 function handleTrainingResult(result: AttemptResult, previousFen: string, previousLastMove: [Key, Key] | null) {

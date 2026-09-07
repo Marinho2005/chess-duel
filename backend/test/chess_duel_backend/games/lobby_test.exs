@@ -71,6 +71,101 @@ defmodule ChessDuelBackend.Games.LobbyTest do
     Lobby.disconnect(other.id)
   end
 
+  test "desafio direto permanece pendente quando o amigo esta offline" do
+    challenger = register_user("friend-challenger@example.com", "friend_challenger")
+    challenged = register_user("friend-challenged@example.com", "friend_challenged")
+
+    Lobby.connect(challenger)
+
+    assert {:ok, %{challenges: [challenge]}} =
+             Lobby.create_direct_challenge(challenger, challenged, "rapid_10_0")
+
+    assert challenge.challenged.id == challenged.id
+    assert challenge.challenged.status == "offline"
+    assert challenge.time_control.id == "rapid_10_0"
+    assert is_binary(challenge.expires_at)
+
+    assert %{challenges: [persisted]} = Lobby.disconnect(challenger.id)
+    assert persisted.id == challenge.id
+
+    assert %{challenges: [received]} = Lobby.connect(challenged)
+    assert received.id == challenge.id
+
+    assert {:ok, game, %{challenges: []}} =
+             Lobby.accept_challenge(challenge.id, challenged.id)
+
+    assert game.white_player.id == challenger.id
+    assert game.black_player.id == challenged.id
+
+    Process.sleep(150)
+    {:ok, game_pid} = GameServer.start_or_get(game.game_id)
+    DynamicSupervisor.terminate_child(ChessDuelBackend.GameSupervisor, game_pid)
+    Lobby.disconnect(challenged.id)
+  end
+
+  test "desafio direto expira e respeita nao perturbar" do
+    challenger = register_user("friend-expire-a@example.com", "friend_expire_a")
+    challenged = register_user("friend-expire-b@example.com", "friend_expire_b")
+
+    Lobby.connect(challenger)
+    Lobby.connect(challenged)
+    assert {:ok, _state} = Lobby.set_presence(challenged.id, "dnd")
+
+    assert {:error, :user_unavailable} =
+             Lobby.create_direct_challenge(challenger, challenged)
+
+    assert {:ok, _state} = Lobby.set_presence(challenged.id, "online")
+
+    assert {:ok, %{challenges: [challenge]}} =
+             Lobby.create_direct_challenge(challenger, challenged)
+
+    send(Process.whereis(Lobby), {:expire_challenge, challenge.id})
+    assert %{challenges: []} = Lobby.connect(challenger)
+
+    Lobby.disconnect(challenger.id)
+    Lobby.disconnect(challenger.id)
+    Lobby.disconnect(challenged.id)
+  end
+
+  test "somente o desafiante pode cancelar um desafio pendente" do
+    challenger = register_user("cancel-challenge-a@example.com", "cancel_challenge_a")
+    challenged = register_user("cancel-challenge-b@example.com", "cancel_challenge_b")
+
+    Lobby.connect(challenger)
+
+    assert {:ok, %{challenges: [challenge]}} =
+             Lobby.create_direct_challenge(challenger, challenged)
+
+    assert {:error, :not_challenger} = Lobby.cancel_challenge(challenge.id, challenged.id)
+    assert {:ok, %{challenges: []}} = Lobby.cancel_challenge(challenge.id, challenger.id)
+
+    Lobby.disconnect(challenger.id)
+  end
+
+  test "um jogador pode manter e cancelar desafios para adversarios diferentes" do
+    challenger = register_user("multiple-challenge-a@example.com", "multiple_challenge_a")
+    first_opponent = register_user("multiple-challenge-b@example.com", "multiple_challenge_b")
+    second_opponent = register_user("multiple-challenge-c@example.com", "multiple_challenge_c")
+
+    Lobby.connect(challenger)
+
+    assert {:ok, %{challenges: [first_challenge]}} =
+             Lobby.create_direct_challenge(challenger, first_opponent, "bullet_1_0")
+
+    assert {:ok, %{challenges: challenges}} =
+             Lobby.create_direct_challenge(challenger, second_opponent, "rapid_10_0")
+
+    assert length(challenges) == 2
+
+    assert Enum.sort(Enum.map(challenges, & &1.challenged.id)) ==
+             Enum.sort([first_opponent.id, second_opponent.id])
+
+    assert {:ok, %{challenges: []}} = Lobby.cancel_challenges(challenger.id)
+
+    assert first_challenge.id in Enum.map(challenges, & &1.id)
+    Lobby.disconnect(challenger.id)
+  end
+
   defp register_user(email, nickname) do
     {:ok, user} =
       Accounts.register_user(%{

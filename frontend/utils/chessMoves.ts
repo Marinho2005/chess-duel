@@ -21,8 +21,8 @@ export function groupMoveRows(moves: StoredMove[]): MoveRow[] {
   }))
 }
 
-export function buildReplayPositions(moves: StoredMove[]): ReplayPosition[] {
-  const chess = new Chess()
+export function buildReplayPositions(moves: StoredMove[], initialFen?: string): ReplayPosition[] {
+  const chess = new Chess(initialFen)
   const positions: ReplayPosition[] = [{ fen: chess.fen(), turn: 'white', lastMove: null }]
 
   for (const move of moves) {

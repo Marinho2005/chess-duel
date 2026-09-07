@@ -7,6 +7,7 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 const auth = useAuthStore()
 const nickname = ref('')
 const countryCode = ref('')
+const birthDate = ref('')
 const saving = ref(false)
 const saved = ref(false)
 const selectedAvatar = ref<File | null>(null)
@@ -33,6 +34,7 @@ const currentAvatarUrl = computed(() => {
 onMounted(() => {
   nickname.value = auth.user?.nickname || ''
   countryCode.value = auth.user?.country_code || ''
+  birthDate.value = auth.user?.birth_date || ''
   document.addEventListener('pointerdown', closeCountryPicker)
 })
 
@@ -40,7 +42,7 @@ async function save() {
   saving.value = true
   saved.value = false
   const avatar = selectedAvatar.value
-  const profileUpdated = await auth.updateProfile(nickname.value.trim(), countryCode.value, countryName(countryCode.value))
+  const profileUpdated = await auth.updateProfile(nickname.value.trim(), countryCode.value, countryName(countryCode.value), birthDate.value)
   const avatarUpdated = !avatar || (profileUpdated && await auth.updateAvatar(avatar))
   saving.value = false
 
@@ -55,6 +57,7 @@ async function save() {
     clearPreview()
     nickname.value = auth.user?.nickname || ''
     countryCode.value = auth.user?.country_code || ''
+    birthDate.value = auth.user?.birth_date || ''
   }
 }
 
@@ -132,6 +135,7 @@ onBeforeUnmount(() => {
         <p v-if="processingAvatar" class="avatar-message">Preparando e recortando a imagem…</p>
         <p v-if="avatarError" class="error">{{ avatarError }}</p>
         <label>Apelido<input v-model="nickname" required minlength="3" maxlength="32" autocomplete="nickname"></label>
+        <label>Data de nascimento <small>Dado privado, visível apenas para você.</small><input v-model="birthDate" type="date" :max="new Date().toISOString().slice(0,10)" autocomplete="bday"></label>
         <div class="form-field">
           <span class="field-label">País</span>
           <div ref="countryPicker" class="country-picker" @keydown.esc="countryOpen = false">

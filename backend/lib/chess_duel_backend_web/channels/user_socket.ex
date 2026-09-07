@@ -9,6 +9,7 @@ defmodule ChessDuelBackendWeb.UserSocket do
   channel "matchmaking:*", ChessDuelBackendWeb.MatchmakingChannel
   channel "guest_matchmaking:*", ChessDuelBackendWeb.GuestMatchmakingChannel
   channel "private_rooms:*", ChessDuelBackendWeb.PrivateRoomChannel
+  channel "puzzle_rush:*", ChessDuelBackendWeb.PuzzleRushChannel
   channel "puzzle_battle:queue:*", ChessDuelBackendWeb.PuzzleBattleQueueChannel
   channel "puzzle_battle:*", ChessDuelBackendWeb.PuzzleBattleChannel
   channel "broadcast_watch:*", ChessDuelBackendWeb.BroadcastWatchChannel

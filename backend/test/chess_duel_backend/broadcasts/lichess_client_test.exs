@@ -5,8 +5,10 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
 
   defmodule FakeHTTP do
     def get(url, _options) do
+      Process.put(:requested_urls, [url | Process.get(:requested_urls, [])])
+
       cond do
-        String.contains?(url, "/api/broadcast?") -> Process.get(:official_response)
+        String.contains?(url, "/api/broadcast/top?") -> Process.get(:official_response)
         String.ends_with?(url, ".pgn?clocks=false&comments=false") -> Process.get(:pgn_response)
         true -> Process.get(:round_response)
       end
@@ -35,7 +37,7 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
   end
 
   test "returns an empty list when no official broadcast is live" do
-    Process.put(:official_response, {:ok, %{status: 200, body: ""}})
+    Process.put(:official_response, {:ok, %{status: 200, body: Jason.encode!(%{active: []})}})
     assert {:ok, []} = LichessClient.fetch_live_games(http_client: FakeHTTP)
   end
 
@@ -52,21 +54,77 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
 
   defp official_ndjson do
     Jason.encode!(%{
-      "tour" => %{
-        "name" => "Example Open",
-        "slug" => "example-open",
-        "image" => "https://lichess1.org/broadcast/example.webp"
-      },
-      "rounds" => [
-        %{"id" => "round123", "name" => "Round 3", "slug" => "round-3", "ongoing" => true}
+      "active" => [
+        %{
+          "tour" => %{
+            "id" => "example-open",
+            "name" => "Example Open",
+            "slug" => "example-open",
+            "image" => "https://lichess1.org/broadcast/example.webp"
+          },
+          "round" => %{
+            "id" => "round123",
+            "name" => "Round 3",
+            "slug" => "round-3",
+            "ongoing" => true
+          }
+        }
       ]
-    }) <> "\n"
+    })
+  end
+
+  test "loads more than four live tournaments and excludes upcoming rounds" do
+    item = Jason.decode!(official_ndjson())["active"] |> hd()
+    live = for n <- 1..7, do: put_in(item, ["tour", "id"], "tour#{n}")
+    upcoming = put_in(item, ["round", "ongoing"], false)
+
+    Process.put(
+      :official_response,
+      {:ok, %{status: 200, body: Jason.encode!(%{active: live ++ [upcoming]})}}
+    )
+
+    assert {:ok, snapshot} = LichessClient.fetch_live_snapshot(http_client: FakeHTTP)
+    assert length(snapshot.tournaments) == 7
+    assert length(snapshot.games) == 7
+    assert Enum.all?(Process.get(:requested_urls), &(not String.contains?(&1, "nb=")))
+  end
+
+  test "retains tournament catalog on a round failure and stops requests after rate limiting" do
+    item = Jason.decode!(official_ndjson())["active"] |> hd()
+
+    Process.put(
+      :official_response,
+      {:ok, %{status: 200, body: Jason.encode!(%{active: [item, item]})}}
+    )
+
+    Process.put(:round_response, {:ok, %{status: 429, body: ""}})
+
+    assert {:ok, %{tournaments: [_, _], games: [], rate_limited: true}} =
+             LichessClient.fetch_live_snapshot(http_client: FakeHTTP)
+
+    assert length(Process.get(:requested_urls)) == 2
+  end
+
+  test "previous rounds include finished games and their result" do
+    round = put_in(round_json(), ["games", Access.at(0), "status"], "1-0")
+    Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(round)}})
+
+    assert {:ok, [%{result: "1-0", round_id: "round123", moves: [_, _, _]}]} =
+             LichessClient.fetch_round_games("round123", http_client: FakeHTTP)
+
+    assert {:ok, []} = LichessClient.fetch_live_games(http_client: FakeHTTP)
+  end
+
+  test "rejects invalid round IDs before making external requests" do
+    assert {:error, :not_found} = LichessClient.fetch_round_games("../x", http_client: FakeHTTP)
+    assert Process.get(:requested_urls, []) == []
   end
 
   defp round_json do
     %{
       "tour" => %{"name" => "Example Open"},
       "round" => %{
+        "id" => "round123",
         "name" => "Round 3",
         "url" => "https://lichess.org/broadcast/example-open/round-3/round123"
       },

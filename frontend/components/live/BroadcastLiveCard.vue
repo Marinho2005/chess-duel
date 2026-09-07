@@ -13,8 +13,8 @@ function playerMeta(title: string | null, rating: number | null) {
 
 <template>
   <article class="live-card broadcast-card">
-    <NuxtLink class="card-link" :to="`/watch/broadcast/${encodeURIComponent(game.game_id)}`" :aria-label="`Assistir ${game.white.name} contra ${game.black.name}`">
-      <header><span>{{ game.tournament }} · {{ game.round }}</span></header>
+    <NuxtLink class="card-link" :to="{ path: `/watch/broadcast/${encodeURIComponent(game.game_id)}`, query: game.round_id ? { round: game.round_id } : {} }" :aria-label="`Assistir ${game.white.name} contra ${game.black.name}`">
+      <header><span>{{ game.tournament }} · {{ game.round }}</span><span>{{ game.result && game.result !== '*' ? `Resultado: ${game.result}` : 'Em andamento' }}</span></header>
       <div class="players">
         <p><strong :title="game.white.name">{{ game.white.name }} <ProfileCountryFlag :code="game.white.country_code" /></strong><small>{{ playerMeta(game.white.title, game.white.rating) }}</small></p>
         <p><strong :title="game.black.name">{{ game.black.name }} <ProfileCountryFlag :code="game.black.country_code" /></strong><small>{{ playerMeta(game.black.title, game.black.rating) }}</small></p>

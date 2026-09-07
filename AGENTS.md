@@ -32,7 +32,14 @@ ChessDuel é um SaaS de xadrez em tempo real (inspirado em chess.com/lichess), e
 - Toda funcionalidade nova é desenvolvida em uma branch própria (`feature/nome-da-tarefa`), criada a partir da `develop` atualizada; nunca trabalhar ou fazer push diretamente na `develop` ou `main`
 - A interface oficial das partidas ao vivo fica em `frontend/pages/game/[gameId]/live.vue`, na rota `/game/:gameId/live`; a análise pós-jogo fica em `frontend/pages/game/[gameId]/review.vue`, na rota `/game/:gameId/review`. As duas são rotas irmãs para impedir que o Nuxt monte a partida ao vivo como página pai da análise.
 - Na rota ao vivo, `:gameId` representa `Game.game_id`, identificador público usado pelo `GameServer` e pelo tópico Phoenix. Na rota de review, representa `Game.id`, chave primária UUID usada pelos endpoints de análise. Não intercambiar os dois valores.
-- As páginas principais usam `frontend/layouts/default.vue`, que renderiza o componente compartilhado `frontend/components/AppSidebar.vue`. Partidas ao vivo e reviews usam `layout: false` para permanecerem em tela cheia.
+- As páginas principais usam `frontend/layouts/default.vue`, que renderiza o header compartilhado `frontend/components/navigation/AppHeader.vue`. O menu Social abre por hover ou teclado/clique e oferece Amigos e Clubes; no celular, os links ficam na navegação expansível. No desktop, configurações e logout aparecem ao lado das notificações, e o avatar leva diretamente ao perfil público do usuário, sem menu ou ícone separado de perfil. Partidas ao vivo e reviews usam `layout: false` para permanecerem em tela cheia.
+- Os três temas (`navy`, `black`, `white`) usam os tokens de `frontend/assets/css/theme.css`, selecionados por `useTheme`; novas interfaces devem reutilizar essas variáveis.
+- Os botões de modalidade do ranking usam `frontend/public/icons/bullet.svg`, `blitz.svg` e `rapid.svg` (bala, raio e relógio), redesenhados com traço único e pontas arredondadas no estilo Lucide. As máscaras CSS acompanham a cor do botão nos três temas.
+- `GameCategoryIcon.vue` compartilha esses ícones entre o ranking, os cards e o resumo de ritmo em `/play`, e os ratings do perfil público em `/user/:username`.
+- O painel "Seu desempenho" do lobby separa Bullet, Blitz e Rápidas em abas; cada aba usa o rating da categoria, consulta histórico e total filtrados e desenha um gráfico compacto com as 20 alterações de rating mais recentes. Partidas sem variação de rating continuam no histórico recente sem o rótulo textual "Casual". No card de amigos, a presença é indicada somente pela bolinha sobre o avatar, sem repetir o status em texto.
+- O ranking mantém sua própria conexão `games:lobby` enquanto está aberto para registrar a presença do usuário. Eventos `lobby_updated` atualizam os status pela API sem recarregar a página; uma consulta a cada 15 segundos também cobre mudanças de conexão em partidas. A conexão e os timers são encerrados ao sair da página, e o modo Invisível aparece offline para os demais.
+- As buscas de jogadores em `/social/friends` e de clubes em `/social/clubs` são incrementais, com debounce de 350 ms e indicação visual durante a requisição.
+- Os botões "Desafiar" nos perfis públicos, no lobby e em `/social/friends` levam a `/play?opponent=:nickname`, onde o card mostra avatar, presença e rating do ritmo selecionado antes do envio pelo evento `challenge_user`. O lobby e `/play` também oferecem o painel "Desafie alguém", que pesquisa qualquer conta confirmada por apelido e preserva a opção de sala privada por link. `/play` exibe os desafios enviados como uma pilha crescente de adversários, com remoção individual por `cancel_challenge`; `cancel_challenges` remove de uma vez todos os desafios enviados pelo usuário. Desafios diretos podem ser enviados a vários destinatários diferentes, inclusive offline, e permanecem em memória por até 24 horas. Desafios comuns iniciados na lista de jogadores online preservam as regras anteriores de presença e desconexão.
 - O projeto tem três pessoas trabalhando nele. Evitar decisões que quebrem trabalho em andamento nas outras branches e manter cada funcionalidade isolada em sua própria branch
 - O ambiente completo de desenvolvimento pode ser iniciado com `docker compose up --build`; a execução local de backend e frontend continua disponível como alternativa.
 
@@ -92,6 +99,7 @@ develop estável -> Pull Request -> main
 - **Evitar engenharia prematura**: não adicionar ferramentas de infraestrutura (Traefik, Sentry, Prometheus, Docker completo para dev, etc) antes de haver necessidade real e comprovada. Priorizar o core do produto funcionando primeiro.
 - **Preferir bibliotecas maduras a reescrever do zero**, especialmente em domínios onde bugs sutis são fáceis de introduzir e difíceis de notar (ex: regras de xadrez).
 - **Autenticação local foi implementada na Fase 2.1** com email/senha e bearer token revogável. A identidade das partidas vem do `user_id` autenticado; OAuth permanece reservado para a etapa 2.2.
+- O cadastro local pede confirmação de senha no cliente e aceita `birth_date` opcional. A data de nascimento não pode ser futura, é privada e aparece somente para o próprio usuário em `/api/users/me` e nas configurações; nunca integra o perfil público.
 - **Escritas em banco nunca bloqueiam a experiência em tempo real** — qualquer persistência durante uma partida ao vivo deve ser assíncrona; o estado em memória do GenServer é sempre a fonte de verdade imediata para os jogadores.
 
 ---
@@ -113,7 +121,7 @@ develop estável -> Pull Request -> main
 
 - [x] **2.1 Autenticação local (email/senha)** — `mix phx.gen.auth`, integrado à tabela de usuários que substituirá o `player_id` temporário usado nos testes. Contas locais precisam confirmar o e-mail antes de receber token ou acessar o sistema; em desenvolvimento, o link é exibido no log do backend.
 - [x] **2.2 OAuth (login social)** — Login com Google, Discord e GitHub via Ueberauth e identidades externas genéricas; somente Google verificado vincula automaticamente por e-mail. Todos reutilizam o bearer token do frontend.
-- [x] **2.3 Perfil de jogador** — Página pública em `/user/:username` com foto de perfil (inicial como fallback), apelido, país, data de criação, estatísticas, partidas recentes e quatro ratings; edição autenticada do próprio perfil e proteção das rotas privadas.
+- [x] **2.3 Perfil de jogador** — Página pública em `/user/:username` com cabeçalho e abas de visão geral, partidas paginadas, estatísticas com evolução de rating, amigos e clubes. Exibe presença, foto, país, data de criação e contador de visualizações incrementado somente por visitantes autenticados diferentes do dono; a edição do próprio perfil permanece protegida.
 - [x] **2.4 Sistema de rating** — ELO com K=32 atualizado de forma assíncrona, atômica e idempotente ao fim da partida; ratings independentes para Bullet, Blitz (compartilhado por 3+0 e 5+0) e Rapid, com snapshots e histórico por categoria persistidos para auditoria.
 - [x] **2.5 Histórico de partidas** — Lista paginada das partidas finalizadas do usuário, com oponente, resultado sob sua perspectiva, motivo, variação de rating e data.
 
@@ -141,12 +149,13 @@ develop estável -> Pull Request -> main
 ### Fase 6 — Social e escala
 
 - [ ] **6.1 Torneios** — Sistema de inscrição, chaveamento, ranking de torneio.
-- [ ] **6.2 Clubes e chat** — Comunidades dentro da plataforma.
-- [~] **6.3 Espectadores/streaming** — Broadcasts profissionais do Lichess podem ser assistidos em tempo real dentro do ChessDuel; a página `/observar` agrupa os broadcasts ativos por torneio, exibe suas imagens oficiais, lista até 30 partidas por torneio e permite filtrar os previews de partidas humanas por Bullet, Blitz 3+0, Blitz 5+0 e Rapid. Os avatares indicam presença no canto inferior direito, e o lobby alterna entre os dois feeds. Espectação completa das partidas internas continua pendente.
+- [~] **6.2 Clubes e chat** — Clubes estão implementados com criação, descoberta, entrada aberta ou por aprovação, múltiplos administradores e avatares. Chat continua pendente para uma etapa separada.
+- [~] **6.3 Espectadores/streaming** — Broadcasts profissionais do Lichess podem ser assistidos em tempo real dentro do ChessDuel; a página `/observar` lista todos os broadcasts em andamento do catálogo público `/api/broadcast/top` do Lichess, sem corte local de torneios, exibe suas imagens oficiais e mantém até 30 previews por torneio no feed. A página do torneio oferece todas as partidas da rodada selecionada e acesso às rodadas anteriores, com resultado e replay por links que preservam `round`. Metadados e PGNs históricos usam cache limitado sob demanda; a leitura de PGNs é isolada da validação das partidas internas. A página também permite filtrar os previews de partidas humanas por Bullet, Blitz 3+0, Blitz 5+0 e Rapid. Os avatares indicam presença no canto inferior direito, e o lobby alterna entre os dois feeds. Espectação completa das partidas internas continua pendente.
 - [ ] **6.4 Multi-região** — Escala geográfica, quando o volume de usuários justificar.
 
 ### Fora do roadmap numerado, mas necessária em algum momento
 
+- [x] **Sistema de amizades e menu Social** — `/social/friends` permite buscar jogadores por apelido em tempo real, enviar, aceitar, recusar e cancelar pedidos, remover amizades e abrir perfis públicos. Os botões "Desafiar" no perfil público de outra pessoa, no lobby e na lista de amigos abrem `/play` com o adversário, sua foto e seu rating já selecionados; o jogador pode manter desafios pendentes para várias pessoas e remover cada um. No lobby e em `/play`, "Desafie alguém" permite buscar qualquer conta confirmada por apelido, preparar um desafio direto ou gerar uma sala privada por link. Separa amigos, pedidos recebidos e enviados, reutiliza o avatar com presença e atualiza as listas a cada 15 segundos enquanto a aba está visível. A descoberta de clubes também pesquisa com debounce enquanto o usuário digita. Usuários invisíveis aparecem offline. O header oferece Amigos e Clubes nos três temas, central de notificações sem destaque dourado no hover, configurações ao lado e acesso ao perfil pela própria foto.
 - [x] **UI real de jogo** — Rota `/game/:gameId/live` com Chessground oficial em componente Vue, destinos legais via chess.js, drag/clique, premove, orientação por cor, relógios, jogadores, histórico e resultado em tempo real; a antiga página manual `test-game.vue` foi removida.
 - [x] **Dockerização completa (desenvolvimento)** — O Compose sobe Postgres, Valkey, Phoenix e Nuxt com dependências isoladas e código montado para recarga em desenvolvimento. Imagens e configuração de produção/deploy continuam pendentes.
 - [x] **Modo convidado** — Sessões temporárias assinadas permitem partidas casuais exclusivamente entre convidados, com fila FIFO em memória, sem criar usuários, persistir partidas ou calcular rating.
@@ -158,9 +167,33 @@ develop estável -> Pull Request -> main
 
 ## Como trabalhar neste projeto
 
+### API de clubes
+
+- Todos os endpoints de clubes exigem bearer token. `POST /api/clubs` cria o clube e o vínculo ativo de administrador do criador na mesma transação; aceita formulário JSON ou multipart com `avatar` opcional JPG, PNG ou WebP de até 2 MB.
+- `GET /api/clubs?q=&page=` pesquisa parcialmente por nome, sem diferenciar maiúsculas, e pagina 12 clubes por vez. `GET /api/clubs/:id` retorna membros ativos, o vínculo do usuário atual e, somente para administradores, os pedidos pendentes.
+- `POST /api/clubs/:id/join` ativa imediatamente em clubes abertos e cria pedido pendente em clubes por aprovação. Um usuário mantém no máximo um vínculo por clube.
+- Administradores usam `PATCH /api/clubs/:id`, e as ações `approve`, `decline` e `promote` em `/api/clubs/:id/memberships/:membership_id/*`. O próprio membro pode sair e administradores podem remover membros com `DELETE`; o último administrador ativo não pode sair nem ser removido.
+- Nomes de clubes não são únicos. Um usuário pode participar de vários clubes, e membros promovidos têm os mesmos poderes administrativos. Chat, torneios internos e competições de clube não fazem parte desta etapa.
+
+### API de amizades
+
+- Todos os endpoints exigem bearer token de uma conta autenticada. `GET /api/users/search?q=...` busca apelidos parcialmente, sem diferenciar maiúsculas, com 2–32 caracteres e até 20 resultados; exclui o próprio usuário e contas não confirmadas, sem expor e-mail.
+- `POST /api/friendships` recebe `user_id` ou `username`. Pedidos repetidos retornam `409`; um pedido no sentido inverso aceita automaticamente a amizade. Pedidos recusados podem ser reenviados reutilizando o registro e atualizando o remetente.
+- `GET /api/friendships` aceita `status=pending|accepted|declined`; sem filtro retorna todos os status. Cada item contém `id`, `status`, `direction=incoming|outgoing`, `user` (o outro jogador) e timestamps.
+- `PATCH /api/friendships/:id/accept` e `/decline` exigem que o usuário seja o destinatário de um pedido pendente. `DELETE /api/friendships/:id` permite remover amizade aceita por qualquer participante ou cancelar pedido pendente apenas pelo remetente.
+- O contexto `ChessDuelBackend.Social` usa um índice único do par ordenado, validação contra autoamizade e transações com locks para serializar pedidos mútuos e respostas concorrentes. A migration adiciona constraints de status e de usuários distintos.
+
+### Perfil público
+
+- `GET /api/users/:nickname?page=` aceita autenticação opcional e retorna visão geral, histórico paginado, estatísticas detalhadas, evolução dos ratings Bullet, Blitz e Rapid, amigos e clubes do jogador.
+- `GET /api/users/me/games` aceita `category=bullet|blitz|rapid`; quando informado, jogos e metadados de paginação são filtrados pela modalidade.
+- Uma abertura autenticada por outro usuário incrementa `users.profile_views`; o próprio perfil, visitantes anônimos e consultas internas com `count_view=false` não incrementam o contador.
+
 ### API e rotas de observação
 
-- `GET /api/broadcasts/tournaments` lista os broadcasts ativos agrupados por torneio, com identificador, nome, imagem oficial e quantidade de partidas ao vivo.
+- `GET /api/broadcasts/tournaments` lista os broadcasts em andamento do catálogo público do Lichess sem limite local de torneios, com identificador, nome, imagem oficial e quantidade de previews ao vivo (nula quando indisponível). Falhas de uma rodada não removem o torneio do catálogo.
+- `GET /api/broadcasts/tournaments/:tournament_id` retorna metadados e todas as rodadas, com status em andamento, encerrada ou programada.
+- `GET /api/broadcasts/rounds/:round_id/games` retorna todas as partidas disponíveis da rodada, incluindo encerradas, com resultado, lances e FEN inicial quando aplicável. O replay `/watch/broadcast/:gameId?round=:roundId` pode ser reaberto mesmo depois do fim da transmissão; avaliações Stockfish permanecem restritas ao feed ao vivo.
 - `GET /api/broadcasts/tournaments/:tournament_id/games` lista até 30 partidas ao vivo exclusivamente do torneio informado.
 - `GET /api/games/live` aceita o filtro opcional `category=bullet|blitz|blitz_increment|rapid`; `blitz_increment` identifica o segundo controle Blitz atualmente configurado como 5+0.
 - `/observar` oferece as abas Torneios e ChessDuel; `/observar/torneio/:tournamentId` abre as partidas agrupadas e reutiliza `/watch/broadcast/:gameId` para a espectação em tempo real.

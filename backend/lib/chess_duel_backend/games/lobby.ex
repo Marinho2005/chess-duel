@@ -25,11 +25,24 @@ defmodule ChessDuelBackend.Games.Lobby do
         {:create_challenge, challenger_id, challenged_id, time_control_id}
       )
 
+  def create_direct_challenge(challenger, challenged, time_control_id \\ TimeControl.default().id),
+    do:
+      GenServer.call(
+        __MODULE__,
+        {:create_direct_challenge, challenger, challenged, time_control_id}
+      )
+
   def accept_challenge(challenge_id, user_id),
     do: GenServer.call(__MODULE__, {:accept_challenge, challenge_id, user_id})
 
   def decline_challenge(challenge_id, user_id),
     do: GenServer.call(__MODULE__, {:decline_challenge, challenge_id, user_id})
+
+  def cancel_challenge(challenge_id, user_id),
+    do: GenServer.call(__MODULE__, {:cancel_challenge, challenge_id, user_id})
+
+  def cancel_challenges(user_id),
+    do: GenServer.call(__MODULE__, {:cancel_challenges, user_id})
 
   @impl true
   def init(_state), do: {:ok, %{users: %{}, challenges: %{}}}
@@ -38,14 +51,7 @@ defmodule ChessDuelBackend.Games.Lobby do
   def handle_call({:connect, user, requested_presence}, _from, state) do
     presence_status = normalize_presence(requested_presence)
 
-    user_data = %{
-      id: user.id,
-      nickname: user.nickname,
-      rating: user.blitz_rating,
-      ratings: User.ratings(user),
-      avatar_url: user.avatar_path,
-      status: presence_status
-    }
+    user_data = user_data(user, presence_status)
 
     users =
       Map.update(state.users, user.id, Map.put(user_data, :connections, 1), fn current ->
@@ -82,7 +88,8 @@ defmodule ChessDuelBackend.Games.Lobby do
     challenges =
       if disconnected? do
         Map.reject(state.challenges, fn {_id, challenge} ->
-          challenge.challenger.id == user_id or challenge.challenged.id == user_id
+          Map.get(challenge, :kind, :lobby) == :lobby and
+            (challenge.challenger.id == user_id or challenge.challenged.id == user_id)
         end)
       else
         state.challenges
@@ -105,14 +112,35 @@ defmodule ChessDuelBackend.Games.Lobby do
          {:ok, challenged} <- fetch_challengeable_user(state, challenged_id),
          {:ok, time_control} <- TimeControl.fetch(time_control_id),
          false <- challenge_exists?(state, challenger_id, challenged_id) do
-      challenge = %{
-        id: Ecto.UUID.generate(),
-        challenger: public_user(challenger),
-        challenged: public_user(challenged),
-        time_control: time_control
-      }
+      {_challenge, state} = put_challenge(state, challenger, challenged, time_control, :lobby)
+      {:reply, {:ok, snapshot(state)}, state}
+    else
+      true -> {:reply, {:error, :challenge_already_exists}, state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
 
-      state = put_in(state.challenges[challenge.id], challenge)
+  def handle_call(
+        {:create_direct_challenge, %{id: user_id}, %{id: user_id}, _time_control_id},
+        _from,
+        state
+      ) do
+    {:reply, {:error, :cannot_challenge_yourself}, state}
+  end
+
+  def handle_call(
+        {:create_direct_challenge, challenger, challenged, time_control_id},
+        _from,
+        state
+      ) do
+    with {:ok, challenged_user} <- fetch_direct_challengeable_user(state, challenged),
+         {:ok, time_control} <- TimeControl.fetch(time_control_id),
+         false <- challenge_exists?(state, challenger.id, challenged.id) do
+      challenger_user = Map.get(state.users, challenger.id, user_data(challenger, "offline"))
+
+      {_challenge, state} =
+        put_challenge(state, challenger_user, challenged_user, time_control, :direct)
+
       {:reply, {:ok, snapshot(state)}, state}
     else
       true -> {:reply, {:error, :challenge_already_exists}, state}
@@ -169,6 +197,37 @@ defmodule ChessDuelBackend.Games.Lobby do
     end
   end
 
+  def handle_call({:cancel_challenge, challenge_id, user_id}, _from, state) do
+    case Map.fetch(state.challenges, challenge_id) do
+      {:ok, %{challenger: %{id: ^user_id}}} ->
+        state = update_in(state.challenges, &Map.delete(&1, challenge_id))
+        {:reply, {:ok, snapshot(state)}, state}
+
+      {:ok, _challenge} ->
+        {:reply, {:error, :not_challenger}, state}
+
+      :error ->
+        {:reply, {:error, :challenge_not_found}, state}
+    end
+  end
+
+  def handle_call({:cancel_challenges, user_id}, _from, state) do
+    challenges =
+      Map.reject(state.challenges, fn {_challenge_id, challenge} ->
+        challenge.challenger.id == user_id
+      end)
+
+    state = %{state | challenges: challenges}
+    {:reply, {:ok, snapshot(state)}, state}
+  end
+
+  @impl true
+  def handle_info({:expire_challenge, challenge_id}, state) do
+    state = update_in(state.challenges, &Map.delete(&1, challenge_id))
+    ChessDuelBackendWeb.Endpoint.broadcast("games:lobby", "lobby_updated", snapshot(state))
+    {:noreply, state}
+  end
+
   defp fetch_online_user(state, user_id) do
     case Map.fetch(state.users, user_id) do
       {:ok, user} -> {:ok, user}
@@ -184,6 +243,47 @@ defmodule ChessDuelBackend.Games.Lobby do
       false -> {:error, :user_unavailable}
       error -> error
     end
+  end
+
+  defp fetch_direct_challengeable_user(state, challenged) do
+    case Map.get(state.users, challenged.id) do
+      nil -> {:ok, user_data(challenged, "offline")}
+      %{status: status} = user when status in ["online", "away"] -> {:ok, user}
+      _user -> {:error, :user_unavailable}
+    end
+  end
+
+  defp put_challenge(state, challenger, challenged, time_control, kind) do
+    challenge = %{
+      id: Ecto.UUID.generate(),
+      challenger: public_user(challenger),
+      challenged: public_user(challenged),
+      time_control: time_control,
+      kind: kind,
+      expires_at: expires_at(kind)
+    }
+
+    if kind == :direct do
+      Process.send_after(
+        self(),
+        {:expire_challenge, challenge.id},
+        friend_challenge_expiration_ms()
+      )
+    end
+
+    {challenge, put_in(state.challenges[challenge.id], challenge)}
+  end
+
+  defp expires_at(:direct) do
+    DateTime.utc_now()
+    |> DateTime.add(div(friend_challenge_expiration_ms(), 1_000), :second)
+    |> DateTime.to_iso8601()
+  end
+
+  defp expires_at(:lobby), do: nil
+
+  defp friend_challenge_expiration_ms do
+    Application.get_env(:chess_duel_backend, :friend_challenge_expiration_ms, :timer.hours(24))
   end
 
   defp challenge_exists?(state, challenger_id, challenged_id) do
@@ -207,12 +307,25 @@ defmodule ChessDuelBackend.Games.Lobby do
         |> Map.values()
         |> Enum.reject(&(&1.status == "invisible"))
         |> Enum.map(&public_user/1),
-      challenges: Map.values(state.challenges)
+      challenges: state.challenges |> Map.values() |> Enum.map(&public_challenge/1)
     }
   end
 
+  defp public_challenge(challenge), do: Map.drop(challenge, [:kind])
+
   defp public_user(user),
-    do: Map.take(user, [:id, :nickname, :rating, :avatar_url, :status])
+    do: Map.take(user, [:id, :nickname, :rating, :ratings, :avatar_url, :status])
+
+  defp user_data(user, status) do
+    %{
+      id: user.id,
+      nickname: user.nickname,
+      rating: user.blitz_rating,
+      ratings: User.ratings(user),
+      avatar_url: user.avatar_path,
+      status: status
+    }
+  end
 
   defp normalize_presence(status) when status in @presence_statuses, do: status
   defp normalize_presence(_status), do: "online"

@@ -84,7 +84,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
       <section v-else-if="activeTab === 'tournaments'" class="tournament-grid" aria-label="Torneios ativos">
         <NuxtLink v-for="tournament in tournaments" :key="tournament.tournament_id" :to="`/observar/torneio/${encodeURIComponent(tournament.tournament_id)}`" class="tournament-card">
           <span class="tournament-image"><img v-if="tournament.image_url" :src="tournament.image_url" :alt="`Imagem do torneio ${tournament.name}`"><ImageIcon v-else :size="32" aria-hidden="true" /></span>
-          <span class="card-content"><span class="live-count"><i aria-hidden="true" /> {{ tournament.live_games }} {{ tournament.live_games === 1 ? 'partida ao vivo' : 'partidas ao vivo' }}</span><strong>{{ tournament.name }}</strong><span class="open-label">Ver partidas <b aria-hidden="true">→</b></span></span>
+          <span class="card-content"><span class="live-count"><i aria-hidden="true" /> {{ tournament.live_games == null ? 'Rodada em andamento' : `${tournament.live_games} ${tournament.live_games === 1 ? 'partida ao vivo' : 'partidas ao vivo'}` }}</span><strong>{{ tournament.name }}</strong><span class="open-label">Ver partidas <b aria-hidden="true">→</b></span></span>
         </NuxtLink>
       </section>
       <section v-else class="games-grid" aria-label="Partidas ChessDuel ao vivo"><LiveChessDuelLiveCard v-for="game in games" :key="game.game_id" :game="game" /></section>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RankedPlayer } from '~/components/ranking/RankingList.vue'
-import { Clock3, Flame, Rocket } from 'lucide-vue-next'
+import { Socket, type Channel } from 'phoenix'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
@@ -10,11 +10,18 @@ type RankingResponse = {
 }
 
 const route = useRoute()
+const auth = useAuthStore()
+const config = useRuntimeConfig()
 const { request } = useApi()
 const players = ref<RankedPlayer[]>([])
 const pagination = ref({ page: 1, page_size: 50, total: 0, total_pages: 1 })
 const loading = ref(true)
 const errorMessage = ref('')
+let presenceSocket: Socket | null = null
+let presenceChannel: Channel | null = null
+let refreshTimer: ReturnType<typeof setTimeout> | undefined
+let pollingTimer: ReturnType<typeof setInterval> | undefined
+let requestVersion = 0
 const categories = [
   { id: 'bullet', label: 'Bullet' }, { id: 'blitz', label: 'Blitz' },
   { id: 'rapid', label: 'Rapid' }
@@ -28,20 +35,61 @@ const firstPosition = computed(() => (pagination.value.page - 1) * pagination.va
 
 watch([requestedPage, selectedCategory], ([page]) => loadRanking(page), { immediate: true })
 
-async function loadRanking(page: number) {
-  loading.value = true
-  errorMessage.value = ''
+async function loadRanking(page: number, silent = false) {
+  const version = ++requestVersion
+  if (!silent) {
+    loading.value = true
+    errorMessage.value = ''
+  }
   const result = await request<RankingResponse>('/api/ranking', { query: { page, category: selectedCategory.value } })
+  if (version !== requestVersion) return
   loading.value = false
 
   if (!result.data) {
-    errorMessage.value = 'Não foi possível carregar o ranking agora. Tente novamente em instantes.'
+    if (!silent || !players.value.length) errorMessage.value = 'Não foi possível carregar o ranking agora. Tente novamente em instantes.'
     return
   }
 
   players.value = result.data.players
   pagination.value = result.data.pagination
+  errorMessage.value = ''
 }
+
+function refreshPresence() {
+  clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => {
+    if (!document.hidden) void loadRanking(requestedPage.value, true)
+  }, 150)
+}
+
+onMounted(() => {
+  if (!auth.token || !auth.user || auth.isGuest) return
+
+  // The ranking must keep a presence connection too: leaving the lobby otherwise
+  // makes its authenticated viewer appear offline in the server's ranking response.
+  const url = `${config.public.api.baseURL.replace(/^http/, 'ws').replace(/\/$/, '')}/socket`
+  presenceSocket = new Socket(url, { params: { token: auth.token } })
+  presenceSocket.connect()
+  presenceChannel = presenceSocket.channel('games:lobby', () => ({ status: auth.presence }))
+  presenceChannel.on('lobby_updated', refreshPresence)
+  presenceChannel.join().receive('ok', refreshPresence)
+  // Game connections also affect public status without emitting lobby_updated.
+  pollingTimer = setInterval(refreshPresence, 15000)
+  document.addEventListener('visibilitychange', refreshPresence)
+})
+
+watch(() => auth.presence, status => {
+  presenceChannel?.push('set_presence', { status })
+})
+
+onBeforeUnmount(() => {
+  ++requestVersion
+  clearTimeout(refreshTimer)
+  clearInterval(pollingTimer)
+  document.removeEventListener('visibilitychange', refreshPresence)
+  presenceChannel?.leave()
+  presenceSocket?.disconnect()
+})
 
 async function changePage(page: number) {
   if (page < 1 || page > pagination.value.total_pages) return
@@ -63,9 +111,7 @@ async function selectCategory(category: string) { await navigateTo({ path: '/ran
       <section class="panel" aria-live="polite">
         <nav class="categories" aria-label="Modalidade do ranking">
           <button v-for="category in categories" :key="category.id" :class="{ active: selectedCategory === category.id }" @click="selectCategory(category.id)">
-            <Rocket v-if="category.id === 'bullet'" class="category-icon" :size="18" :stroke-width="2" aria-hidden="true" />
-            <Flame v-else-if="category.id === 'blitz'" class="category-icon" :size="18" :stroke-width="2" aria-hidden="true" />
-            <Clock3 v-else class="category-icon" :size="18" :stroke-width="2" aria-hidden="true" />
+            <GameCategoryIcon :category="category.id" />
             {{ category.label }}
           </button>
         </nav>
@@ -97,7 +143,6 @@ header span { display: block; margin-top: .65rem; color: #806d5d; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.2rem; color: #806d5d; font-size: .88rem; }
 button { padding: .7rem 1rem; color: #3c2b20; background: #f7eedf; border: 1px solid #dfcfb8; border-radius: 9px; cursor: pointer; }button:disabled { opacity: .5; cursor: default; }
 .categories { display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem; margin-bottom:1.2rem; }.categories button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }.categories button.active { color:var(--accent-ink); background:var(--accent); border-color:var(--accent); }
-.category-icon { flex: 0 0 auto; }
 @media (max-width: 760px) { .content { padding: 1rem; }.pagination { justify-content: space-between; gap: .5rem; } }
 @media (max-width:600px) { .categories { grid-template-columns:repeat(2,1fr); } }
 .page-shell { color: var(--text); background: var(--bg); }.content { width: min(1120px, 100%); margin: auto; }header, .panel { background: var(--surface); border-color: var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow); }header p, .summary strong { color: var(--accent); }h1 { font-family: inherit; font-weight: 700; letter-spacing: -.035em; }header span, .summary, .state, .pagination { color: var(--text-muted); }.state { border-color: var(--border); }.state.error { color: var(--danger); background: var(--danger-soft); }button { color: var(--text); background: var(--surface-strong); border-color: var(--border); }

@@ -6,7 +6,7 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
   alias ChessDuelBackend.Accounts
   alias ChessDuelBackend.Accounts.Guest
   alias ChessDuelBackend.Accounts.User
-  alias ChessDuelBackend.Repo
+  alias ChessDuelBackend.{Repo, Social}
   alias ChessDuelBackend.Games.GameServer
   alias ChessDuelBackendWeb.GameChannel
   alias ChessDuelBackendWeb.GamesChannel
@@ -182,6 +182,102 @@ defmodule ChessDuelBackendWeb.UserSocketTest do
                PrivateRoomChannel,
                "private_rooms:outra-identidade"
              )
+  end
+
+  test "GamesChannel envia desafio direto para amigo offline" do
+    challenger = register_user("direct-challenge-a@example.com", "direct_challenge_a")
+    challenged = register_user("direct-challenge-b@example.com", "direct_challenge_b")
+    {:ok, friendship} = Social.request(challenger.id, %{"user_id" => challenged.id})
+    {:ok, _friendship} = Social.act(challenged.id, friendship.id, :accept)
+
+    assert {:ok, _state, challenger_channel} =
+             challenger
+             |> connect_user()
+             |> Phoenix.ChannelTest.subscribe_and_join(GamesChannel, "games:lobby")
+
+    ref =
+      Phoenix.ChannelTest.push(challenger_channel, "challenge_friend", %{
+        "user_id" => challenged.id,
+        "time_control" => "bullet_1_0"
+      })
+
+    Phoenix.ChannelTest.assert_reply(ref, :ok)
+
+    assert {:ok, %{challenges: [challenge]}, challenged_channel} =
+             challenged
+             |> connect_user()
+             |> Phoenix.ChannelTest.subscribe_and_join(GamesChannel, "games:lobby")
+
+    assert challenge.challenger.id == challenger.id
+    assert challenge.challenged.id == challenged.id
+    assert challenge.time_control.id == "bullet_1_0"
+
+    ref =
+      Phoenix.ChannelTest.push(challenged_channel, "decline_challenge", %{
+        "challenge_id" => challenge.id
+      })
+
+    Phoenix.ChannelTest.assert_reply(ref, :ok)
+  end
+
+  test "GamesChannel recusa desafio direto para quem nao e amigo" do
+    challenger = register_user("not-friend-a@example.com", "not_friend_a")
+    other = register_user("not-friend-b@example.com", "not_friend_b")
+
+    assert {:ok, _state, channel} =
+             challenger
+             |> connect_user()
+             |> Phoenix.ChannelTest.subscribe_and_join(GamesChannel, "games:lobby")
+
+    ref =
+      Phoenix.ChannelTest.push(channel, "challenge_friend", %{
+        "user_id" => other.id,
+        "time_control" => "blitz_3_0"
+      })
+
+    Phoenix.ChannelTest.assert_reply(ref, :error, %{reason: "not_friends"})
+  end
+
+  test "GamesChannel envia desafio por apelido para usuario confirmado sem amizade" do
+    challenger = register_user("nickname-challenge-a@example.com", "nickname_challenge_a")
+    challenged = register_user("nickname-challenge-b@example.com", "nickname_challenge_b")
+
+    assert {:ok, _state, challenger_channel} =
+             challenger
+             |> connect_user()
+             |> Phoenix.ChannelTest.subscribe_and_join(GamesChannel, "games:lobby")
+
+    ref =
+      Phoenix.ChannelTest.push(challenger_channel, "challenge_user", %{
+        "user_id" => challenged.id,
+        "time_control" => "rapid_10_0"
+      })
+
+    Phoenix.ChannelTest.assert_reply(ref, :ok, %{challenge: %{id: challenge_id}})
+
+    assert {:ok, %{challenges: [challenge]}, challenged_channel} =
+             challenged
+             |> connect_user()
+             |> Phoenix.ChannelTest.subscribe_and_join(GamesChannel, "games:lobby")
+
+    assert challenge.challenger.id == challenger.id
+    assert challenge.challenged.id == challenged.id
+    assert challenge.time_control.id == "rapid_10_0"
+    assert challenge.id == challenge_id
+
+    ref =
+      Phoenix.ChannelTest.push(challenged_channel, "cancel_challenge", %{
+        "challenge_id" => challenge.id
+      })
+
+    Phoenix.ChannelTest.assert_reply(ref, :error, %{reason: "not_challenger"})
+
+    ref =
+      Phoenix.ChannelTest.push(challenger_channel, "cancel_challenge", %{
+        "challenge_id" => challenge.id
+      })
+
+    Phoenix.ChannelTest.assert_reply(ref, :ok)
   end
 
   test "GameChannel usa ids reais e preserva a cor na reconexao" do
