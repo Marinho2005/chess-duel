@@ -12,6 +12,11 @@ import { soundForSan } from '~/utils/gameSound'
 definePageMeta({ middleware: 'auth', layout: false })
 
 const route = useRoute()
+const api = useApi()
+const roundId = computed(() => typeof route.query.round === 'string' ? route.query.round : '')
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+let disposed = false
+const completed = computed(() => Boolean(game.value?.result && game.value.result !== '*'))
 const auth = useAuthStore()
 const config = useRuntimeConfig()
 const sounds = useGameSounds()
@@ -28,7 +33,7 @@ let channel: Channel | null = null
 let latestReceivedPly = 0
 const soundTimers: Array<ReturnType<typeof setTimeout>> = []
 
-const replayPositions = computed(() => buildReplayPositions(game.value?.moves || []))
+const replayPositions = computed(() => buildReplayPositions(game.value?.moves || [], game.value?.initial_fen || undefined))
 const displayedPly = computed(() => viewedPly.value ?? game.value?.moves.length ?? 0)
 const viewingHistory = computed(() => viewedPly.value !== null)
 const displayedPosition = computed(() => replayPositions.value[displayedPly.value])
@@ -72,16 +77,23 @@ onMounted(async () => {
     return
   }
 
+  if (roundId.value) {
+    await loadRoundGame()
+    if (disposed) return
+    refreshTimer = setInterval(() => { if (!completed.value) void loadRoundGame() }, 20_000)
+    if (completed.value) return
+  }
+
   const websocketUrl = `${config.public.api.baseURL.replace(/^http/, 'ws').replace(/\/$/, '')}/socket`
   socket = new Socket(websocketUrl, { params: { token: auth.token } })
   socket.connect()
   socket.onError(() => { if (!game.value) state.value = 'unavailable' })
-  socket.onClose(() => { if (game.value) state.value = 'ended' })
+  socket.onClose(() => { if (!game.value) state.value = 'unavailable' })
 
   channel = socket.channel(`broadcast_watch:${gameId.value}`, {})
   channel.on('broadcast_move', applyMove)
   channel.on('broadcast_evaluation', applyEvaluation)
-  channel.on('broadcast_ended', () => { state.value = 'ended' })
+  channel.on('broadcast_ended', () => { if (roundId.value) void loadRoundGame(); else state.value = 'ended' })
   channel.join()
     .receive('ok', (snapshot: BroadcastLiveGame) => {
       game.value = snapshot
@@ -90,12 +102,14 @@ onMounted(async () => {
       requestEvaluation(snapshot.moves.length)
     })
     .receive('error', (error: { reason?: string }) => {
-      state.value = error.reason === 'broadcast_not_found' ? 'not_found' : 'unavailable'
+      if (!game.value) state.value = error.reason === 'broadcast_not_found' ? 'not_found' : 'unavailable'
     })
-    .receive('timeout', () => { state.value = 'unavailable' })
+    .receive('timeout', () => { if (!game.value) state.value = 'unavailable' })
 })
 
 onBeforeUnmount(() => {
+  disposed = true
+  if (refreshTimer) clearInterval(refreshTimer)
   channel?.off('broadcast_move')
   channel?.off('broadcast_evaluation')
   channel?.off('broadcast_ended')
@@ -107,8 +121,23 @@ onBeforeUnmount(() => {
   socket = null
 })
 
+async function loadRoundGame() {
+  const result = await api.request<{ games: BroadcastLiveGame[] }>(`/api/broadcasts/rounds/${encodeURIComponent(roundId.value)}/games`)
+  if (disposed) return
+  const snapshot = result.data?.games.find(item => item.game_id === gameId.value)
+  if (snapshot) {
+    if (game.value && snapshot.moves.length < game.value.moves.length && snapshot.result === '*') return
+    game.value = snapshot
+    latestReceivedPly = snapshot.moves.length
+    state.value = 'loaded'
+    if (viewedPly.value !== null) viewedPly.value = Math.min(viewedPly.value, snapshot.moves.length)
+  } else if (!game.value) {
+    state.value = result.error ? 'unavailable' : 'not_found'
+  }
+}
+
 function applyMove(payload: { fen: string; last_move: LiveMove | null; moves: LiveMove[] }) {
-  if (!game.value) return
+  if (!game.value || completed.value) return
   const wasAtLivePosition = viewedPly.value === null
   const newMoves = payload.moves.slice(latestReceivedPly)
   newMoves.forEach((move, index) => {
@@ -131,7 +160,7 @@ function selectPly(ply: number) {
 }
 
 function requestEvaluation(ply: number) {
-  if (!channel || evaluations.value[ply]) return
+  if (completed.value || !channel || evaluations.value[ply]) return
 
   evaluatingPly.value = ply
   evaluationError.value = false
@@ -177,12 +206,12 @@ function playerMeta(title: string | null, rating: number | null) {
     <template #context-actions>
       <div class="header-actions">
         <button type="button" class="sound-toggle" :aria-pressed="sounds.enabled.value" :title="sounds.enabled.value ? 'Desativar sons' : 'Ativar sons'" @click="sounds.toggle">{{ sounds.enabled.value ? '🔊' : '🔇' }}<span>Sons</span></button>
-        <NuxtLink class="back-link" to="/lobby"><ArrowLeft :size="18" aria-hidden="true" /> Voltar ao lobby</NuxtLink>
+        <NuxtLink class="back-link" :to="game ? { path: `/observar/torneio/${game.tournament_id}`, query: { round: game.round_id } } : '/observar'"><ArrowLeft :size="18" aria-hidden="true" /> Voltar ao torneio</NuxtLink>
       </div>
     </template>
   </NavigationAppHeader>
   <main class="watch-page" @pointerdown.once="sounds.unlock">
-    <section v-if="state !== 'loaded' || !game" class="watch-state" :role="state === 'connecting' ? 'status' : 'alert'">
+    <section v-if="!game" class="watch-state" :role="state === 'connecting' ? 'status' : 'alert'">
       <strong v-if="state === 'connecting'">Conectando ao broadcast…</strong>
       <template v-else-if="state === 'not_found'"><strong>Broadcast não encontrado.</strong><p>Ele pode ter sido encerrado ou removido da lista ao vivo.</p></template>
       <template v-else-if="state === 'ended'"><strong>O broadcast foi encerrado.</strong><p>Volte ao lobby para encontrar outras partidas ao vivo.</p></template>
@@ -195,7 +224,7 @@ function playerMeta(title: string | null, rating: number | null) {
           <div><strong :title="game.black.name">{{ game.black.name }} <ProfileCountryFlag :code="game.black.country_code" /></strong><small>{{ playerMeta(game.black.title, game.black.rating) }}</small></div>
         </article>
         <div class="board-with-evaluation">
-          <div class="evaluation-rail" :aria-busy="evaluatingPly === displayedPly" :title="evaluationError ? 'Avaliação temporariamente indisponível' : 'Avaliação Stockfish'">
+          <div v-if="!completed" class="evaluation-rail" :aria-busy="evaluatingPly === displayedPly" :title="evaluationError ? 'Avaliação temporariamente indisponível' : 'Avaliação Stockfish'">
             <EvaluationBar :evaluation="displayedEvaluation" orientation="white" />
             <span v-if="evaluatingPly === displayedPly" class="evaluation-loading" aria-label="Stockfish analisando">•••</span>
           </div>
@@ -210,10 +239,10 @@ function playerMeta(title: string | null, rating: number | null) {
       </div>
       <aside class="game-panel">
         <div class="panel-heading">
-          <span class="live-badge">● AO VIVO</span>
+          <span class="live-badge">{{ completed ? `ENCERRADA · ${game.result}` : state === 'ended' ? 'TRANSMISSÃO ENCERRADA' : '● AO VIVO' }}</span>
           <h1>{{ game.tournament }}</h1>
           <p>{{ game.round }}</p>
-          <section class="suggested-line" aria-live="polite">
+          <section v-if="!completed" class="suggested-line" aria-live="polite">
             <strong>Linha sugerida</strong>
             <code v-if="suggestedLine">{{ suggestedLine }}</code>
             <span v-else-if="evaluatingPly === displayedPly">Stockfish analisando…</span>
@@ -227,11 +256,12 @@ function playerMeta(title: string | null, rating: number | null) {
             <div>
               <button type="button" :disabled="displayedPly === 0" aria-label="Lance anterior" @click="selectPly(displayedPly - 1)">←</button>
               <button type="button" :disabled="displayedPly === game.moves.length" aria-label="Próximo lance" @click="selectPly(displayedPly + 1)">→</button>
-              <button v-if="viewingHistory" type="button" @click="selectPly(game.moves.length)">Ao vivo</button>
+              <button v-if="viewingHistory" type="button" @click="selectPly(game.moves.length)">{{ completed ? 'Posição final' : 'Ao vivo' }}</button>
               <span>{{ displayedPly }}/{{ game.moves.length }}</span>
             </div>
           </div>
-          <GameMoveTable v-if="game.moves.length" :moves="game.moves" :current-ply="displayedPly" @select="selectPly" />
+          <div v-if="game.initial_fen && game.moves.length" class="custom-position-moves"><button v-for="(move, index) in game.moves" :key="index" type="button" :aria-pressed="displayedPly === index + 1" @click="selectPly(index + 1)">{{ move.san }}</button></div>
+          <GameMoveTable v-else-if="game.moves.length" :moves="game.moves" :current-ply="displayedPly" @select="selectPly" />
           <p v-else class="empty-moves">Aguardando o primeiro lance.</p>
           <small class="keyboard-hint">Use as setas ← → do teclado para rever a partida.</small>
         </section>
@@ -242,6 +272,7 @@ function playerMeta(title: string | null, rating: number | null) {
 </template>
 
 <style scoped>
+.custom-position-moves { display:flex; flex-wrap:wrap; gap:.4rem; }.custom-position-moves button { padding:.5rem; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:5px; cursor:pointer; }.custom-position-moves button[aria-pressed="true"] { border-color:var(--accent); }
 .header-actions { display:flex; align-items:center; gap:.5rem; margin-left:auto; }.back-link { display:flex; align-items:center; gap:.4rem; color:var(--text); text-decoration:none; }.back-link:hover { color:var(--accent); text-decoration:underline; }.sound-toggle { display:inline-flex; align-items:center; gap:.3rem; padding:.3rem .45rem; color:var(--text); background:transparent; border:1px solid var(--border); border-radius:8px; font:inherit; cursor:pointer; }.sound-toggle span { font-size:.72rem; }.sound-toggle:hover { color:var(--accent); background:var(--surface-hover); border-color:var(--accent); }
 .watch-page { min-height:calc(100vh - 60px); padding:0 clamp(1rem,3vw,2.5rem) 1.5rem; color:var(--text); background:var(--bg); font-family:Inter,system-ui,sans-serif; }
 .watch-layout { display:grid; grid-template-columns:minmax(420px,760px) minmax(290px,360px); justify-content:center; align-items:start; gap:clamp(1.2rem,3vw,2.5rem); max-width:1400px; margin:auto; }

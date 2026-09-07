@@ -1,10 +1,15 @@
 defmodule ChessDuelBackendWeb.UserController do
   use ChessDuelBackendWeb, :controller
+  import Ecto.Query, only: [from: 2]
 
   alias ChessDuelBackend.Accounts
+  alias ChessDuelBackend.Accounts.User
   alias ChessDuelBackend.Accounts.AvatarStorage
+  alias ChessDuelBackend.Clubs
   alias ChessDuelBackendWeb.UserJSON
   alias ChessDuelBackend.Games
+  alias ChessDuelBackend.Repo
+  alias ChessDuelBackend.Social
 
   def me(conn, _params) do
     json(conn, %{user: UserJSON.data(conn.assigns.current_user)})
@@ -18,14 +23,34 @@ defmodule ChessDuelBackendWeb.UserController do
         |> json(%{error: "profile_not_found"})
 
       user ->
+        user =
+          if conn.params["count_view"] == "false",
+            do: user,
+            else: count_profile_view(user, conn.assigns[:current_user])
+
         stats = Games.public_stats_for_user(user.id)
-        recent = Games.list_finished_games_for_user(user.id, page: 1, per_page: 5)
+
+        history =
+          Games.list_finished_games_for_user(user.id,
+            page: parse_page(conn.params["page"]),
+            per_page: 10
+          )
+
+        friends = Social.public_friends(user.id)
 
         json(conn, %{
           profile:
             UserJSON.public_data(user, %{
               stats: stats,
-              recent_games: recent.games,
+              detailed_stats: Games.detailed_stats_for_user(user.id),
+              recent_games: Enum.take(history.games, 5),
+              games: history.games,
+              games_pagination: history.pagination,
+              rating_history: Games.rating_history_for_user(user.id),
+              friends: Enum.map(friends, &public_friend/1),
+              friends_count: length(friends),
+              clubs: Enum.map(Clubs.list_for_user(user.id), &public_club/1),
+              profile_views: user.profile_views,
               status: Games.player_status(user.id)
             })
         })
@@ -112,4 +137,29 @@ defmodule ChessDuelBackendWeb.UserController do
     do: String.to_existing_atom(value)
 
   defp parse_category(_), do: :blitz
+
+  defp count_profile_view(%User{} = user, %User{id: viewer_id}) when viewer_id != user.id do
+    {1, [updated]} =
+      Repo.update_all(
+        from(u in User, where: u.id == ^user.id, select: u),
+        inc: [profile_views: 1]
+      )
+
+    updated
+  end
+
+  defp count_profile_view(user, _viewer), do: user
+
+  defp public_friend(user),
+    do: UserJSON.public_data(user, %{status: Games.player_status(user.id)})
+
+  defp public_club(%{club: club, role: role, member_count: count}),
+    do: %{
+      id: club.id,
+      name: club.name,
+      description: club.description,
+      avatar_url: club.avatar_path,
+      role: role,
+      member_count: count
+    }
 end

@@ -9,6 +9,7 @@ defmodule ChessDuelBackendWeb.UserJSON do
       avatar_url: user.avatar_path,
       rating: user.blitz_rating,
       ratings: ChessDuelBackend.Accounts.User.ratings(user),
+      birth_date: user.birth_date,
       inserted_at: user.inserted_at
     }
   end

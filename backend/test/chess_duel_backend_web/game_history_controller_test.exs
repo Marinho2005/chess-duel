@@ -85,6 +85,45 @@ defmodule ChessDuelBackendWeb.GameHistoryControllerTest do
              |> json_response(401)
   end
 
+  test "filtra o historico e a paginacao pela categoria", %{conn: conn} do
+    user = confirmed_user!("category-history@example.com", "category_history")
+    opponent = confirmed_user!("category-opponent@example.com", "category_opponent")
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    bullet =
+      finished_game!(user.id, opponent.id, "white_wins", "checkmate", now, %{
+        initial_time_ms: 60_000,
+        increment_ms: 0
+      })
+
+    rating_change!(bullet, user, 14, :bullet)
+
+    finished_game!(user.id, opponent.id, "black_wins", "timeout", DateTime.add(now, -10), %{
+      initial_time_ms: 600_000,
+      increment_ms: 0
+    })
+
+    token = Accounts.generate_user_api_token(user)
+
+    response =
+      conn
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> get("/api/users/me/games?category=bullet&per_page=5")
+      |> json_response(200)
+
+    assert response["pagination"]["total"] == 1
+    assert [%{"id" => game_id, "time_control" => %{"id" => "bullet_1_0"}}] = response["games"]
+    assert game_id == bullet.id
+
+    assert [
+             %{
+               "category" => "bullet",
+               "rating_before" => 1200,
+               "rating_after" => 1214
+             }
+           ] = response["rating_history"]
+  end
+
   defp confirmed_user!(email, nickname) do
     {:ok, user} =
       Accounts.register_user(%{email: email, nickname: nickname, password: "password1234"})
@@ -94,9 +133,9 @@ defmodule ChessDuelBackendWeb.GameHistoryControllerTest do
     |> Repo.update!()
   end
 
-  defp finished_game!(white_id, black_id, result, end_reason, finished_at) do
+  defp finished_game!(white_id, black_id, result, end_reason, finished_at, extra_attrs \\ %{}) do
     {:ok, game} =
-      Games.create_game(%{
+      %{
         game_id: "history-game-#{System.unique_integer([:positive])}",
         status: "finished",
         white_player_id: white_id,
@@ -104,19 +143,22 @@ defmodule ChessDuelBackendWeb.GameHistoryControllerTest do
         result: result,
         end_reason: end_reason,
         finished_at: finished_at
-      })
+      }
+      |> Map.merge(extra_attrs)
+      |> Games.create_game()
 
     game
   end
 
-  defp rating_change!(game, user, change) do
+  defp rating_change!(game, user, change, category \\ :blitz) do
     %RatingChange{}
     |> RatingChange.changeset(%{
       game_id: game.id,
       user_id: user.id,
       rating_before: 1200,
       rating_after: 1200 + change,
-      change: change
+      change: change,
+      category: category
     })
     |> Repo.insert!()
   end

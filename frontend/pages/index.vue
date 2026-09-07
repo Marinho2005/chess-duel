@@ -7,6 +7,9 @@ const mode = ref<'login' | 'register'>('login')
 const nickname = ref('')
 const email = ref('')
 const password = ref('')
+const passwordConfirmation = ref('')
+const birthDate = ref('')
+const registrationError = ref('')
 const submitting = ref(false)
 const startingGuest = ref(false)
 const confirmationPending = ref(false)
@@ -36,19 +39,27 @@ onMounted(async () => {
 })
 
 async function submit() {
-  submitting.value = true
-
   if (mode.value === 'register') {
-    confirmationPending.value = await auth.register(email.value, password.value, nickname.value)
+    registrationError.value = ''
+    if (password.value !== passwordConfirmation.value) {
+      registrationError.value = 'As senhas não coincidem. Digite a mesma senha nos dois campos.'
+      return
+    }
+    submitting.value = true
+    confirmationPending.value = await auth.register(email.value, password.value, nickname.value, birthDate.value)
     submitting.value = false
 
     if (confirmationPending.value) {
       password.value = ''
+      passwordConfirmation.value = ''
+      birthDate.value = ''
       mode.value = 'login'
     }
 
     return
   }
+
+  submitting.value = true
 
   const authenticated = await auth.logIn(email.value, password.value)
   submitting.value = false
@@ -99,9 +110,16 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
         <span>E-mail</span>
         <input v-model="email" type="email" required autocomplete="email" placeholder="voce@email.com">
       </label>
-      <label>
+      <div class="password-row" :class="{ single: mode === 'login' }"><label>
         <span>Senha</span>
         <input v-model="password" type="password" required :minlength="mode === 'register' ? 12 : undefined" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" placeholder="Sua senha">
+      </label><label v-if="mode === 'register'">
+        <span>Confirmar senha</span>
+        <input v-model="passwordConfirmation" type="password" required minlength="12" autocomplete="new-password" placeholder="Repita sua senha">
+      </label></div>
+      <label v-if="mode === 'register'">
+        <span>Data de nascimento <small>(opcional e privada)</small></span>
+        <input v-model="birthDate" type="date" :max="new Date().toISOString().slice(0,10)" autocomplete="bday">
       </label>
 
       <p v-if="mode === 'register'" class="hint">Use pelo menos 12 caracteres.</p>
@@ -137,7 +155,7 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
           {{ startingGuest ? 'Preparando sessão...' : 'Jogar como convidado' }}
         </button>
       </template>
-      <p v-if="auth.error || oauthError" class="error">{{ auth.error || oauthError }}</p>
+      <p v-if="registrationError || auth.error || oauthError" class="error">{{ registrationError || auth.error || oauthError }}</p>
     </form>
 
    
@@ -152,11 +170,13 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
   box-sizing: border-box;
   width: 100%;
   height: 100dvh;
-  place-content: center;
+  align-content: safe center;
+  justify-content: center;
   justify-items: center;
   gap: 2rem;
   padding: 2rem 1rem;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--ink);
   background-color: #f4eddf;
   background-image: radial-gradient(#bba98e40 0.7px, transparent 0.7px);
@@ -167,12 +187,14 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
 .brand-title { font: 700 clamp(3rem, 8vw, 5rem)/1 Georgia, serif; color: var(--brown); }
 .brand-title span { font-size: 0.75em; }
 .brand p { margin: 0.65rem 0 0; color: #5f4a37; font: italic 1.25rem Georgia, serif; letter-spacing: 0.08em; }
-.auth-card { display: grid; width: min(420px, calc(100vw - 2rem)); gap: 1rem; padding: 2rem; background: #fffaf0dd; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px #6f45281c; }
+.auth-card { display: grid; box-sizing: border-box; width: min(560px, calc(100vw - 2rem)); gap: 1rem; padding: 2rem; background: #fffaf0dd; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px #6f45281c; }
 .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; padding: 0.3rem; background: #efe2ce; border: 1px solid #dfd2c1; border-radius: 12px; }
 .tabs button { border: 0; background: transparent; box-shadow: none; }
 .tabs button.active { color: #fffaf0; background: var(--brown); box-shadow: 0 6px 14px #6f452822; }
-label { display: grid; gap: 0.45rem; color: #6e5847; font-size: 0.9rem; }
-input, button { padding: 0.9rem 1rem; color: inherit; background: #fff; border: 1px solid #dfd2c1; border-radius: 10px; font: inherit; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+label { display: grid; min-width: 0; gap: 0.45rem; color: #6e5847; font-size: 0.9rem; }
+.password-row { display:grid; min-width:0; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:.7rem; }.password-row.single { grid-template-columns:minmax(0,1fr); }label small { color:var(--text-muted); font-weight:500; }
+input, button { box-sizing:border-box; min-width:0; max-width:100%; padding: 0.9rem 1rem; color: inherit; background: #fff; border: 1px solid #dfd2c1; border-radius: 10px; font: inherit; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+input { width:100%; }
 button { cursor: pointer; }
 .primary { color: white; font-weight: 700; background: var(--brown); border-color: var(--brown); box-shadow: 0 8px 16px #6f45282b; }
 .primary:hover:not(:disabled) { background: #7f5130; border-color: #7f5130; transform: translateY(-1px); }
@@ -194,6 +216,7 @@ button { cursor: pointer; }
 .success-message { margin: 0; padding: 0.8rem; color: #345b36; text-align: center; background: #e4f0df; border: 1px solid #c6ddbf; border-radius: 10px; }
 .tagline { max-width: 520px; margin: 0; color: #806d5d; text-align: center; }
 @media (max-width: 390px) { .social { gap: .3rem; padding-inline: .35rem; font-size: .76rem; }.google-icon, .social-icon { width: 1.05rem; height: 1.05rem; } }
+@media (max-width: 520px) { .auth-shell{justify-items:stretch;padding:1.25rem 1rem}.auth-card{padding:1.35rem}.password-row { grid-template-columns:1fr; } }
 .auth-shell { min-height: 100dvh; height: auto; color: var(--text); background: radial-gradient(circle at 50% 5%, color-mix(in srgb,var(--accent) 10%,transparent), transparent 34%), var(--bg); background-size: auto; }.brand-title { color: var(--text); font-family: Georgia, serif; font-size: clamp(3rem, 8vw, 5rem); letter-spacing: -.02em; }.brand-title span { color: var(--accent); }.brand p { color: var(--text-muted); font-family: Georgia, serif; font-size: 1.25rem; font-style: italic; text-transform: none; letter-spacing: .08em; }.auth-card { background: color-mix(in srgb,var(--surface) 96%,transparent); border-color: var(--border); border-radius: 18px; box-shadow: var(--shadow); backdrop-filter: blur(16px); }.tabs { background: var(--surface-strong); border-color: var(--border); }.tabs button { color: var(--text-muted); }.tabs button.active { color: var(--accent-ink); background: var(--accent); box-shadow: none; }label { color: var(--text-muted); }input, button { color: var(--text); background: var(--surface-strong); border-color: var(--border); }input::placeholder { color: color-mix(in srgb,var(--text-muted) 72%,transparent); }input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent); }.primary { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); box-shadow: none; }.primary:hover:not(:disabled) { color: var(--accent-ink); background: var(--accent-hover); border-color: var(--accent-hover); }.divider { color: var(--text-muted); }.divider::before, .divider::after { background: var(--border); }.social { color: var(--text) !important; background: var(--surface-strong); }.social:hover { background: var(--surface-hover); box-shadow: none; }.social.discord { color: #8690ff !important; }.social.github { color: var(--text) !important; }.guest-link { color: var(--text-muted); }.guest-link:hover { color: var(--accent); background: var(--surface-hover); }.hint { color: var(--text-muted); }.error { color: var(--danger); }.session-message { color: var(--accent); background: color-mix(in srgb,var(--accent) 12%,transparent); }.success-message { color: var(--success); background: var(--success-soft); border-color: var(--success); }
 .tabs { gap: 0; padding: 0; overflow: hidden; background: var(--surface-strong); border: 0; border-radius: 11px; }.tabs button { min-height: 46px; color: var(--text-muted); background: transparent; border: 0; border-radius: 10px; font-weight: 500; }.tabs button.active { color: var(--text); background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 5%); }
 .brand-title { display: flex; align-items: center; justify-content: center; gap: .65rem; }.brand-title > span { color: var(--text); }.brand-title > .brand-pawn { display:inline-flex; align-items:center; color:var(--accent); font-family:Georgia,"Times New Roman",serif; font-size:.82em; line-height:.8; filter:drop-shadow(0 4px 8px color-mix(in srgb,var(--accent) 20%,transparent)); }
