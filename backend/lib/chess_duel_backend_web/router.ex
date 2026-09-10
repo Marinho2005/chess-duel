@@ -14,6 +14,23 @@ defmodule ChessDuelBackendWeb.Router do
     plug ChessDuelBackendWeb.UserAuth, :fetch_current_user
   end
 
+  pipeline :admin_api do
+    plug ChessDuelBackendWeb.UserAuth, :require_admin
+  end
+
+  scope "/api/admin", ChessDuelBackendWeb do
+    pipe_through [:api, :authenticated_api, :admin_api]
+    get "/dashboard", AdminController, :dashboard
+    get "/users", AdminController, :users
+    get "/users/:id", AdminController, :user
+    post "/users/:id/suspend", AdminController, :suspend
+    post "/users/:id/ban", AdminController, :ban
+    post "/users/:id/reactivate", AdminController, :reactivate
+    get "/games", AdminController, :games
+    get "/games/:id", AdminController, :game
+    get "/system", AdminController, :system
+  end
+
   pipeline :oauth do
     plug :fetch_session
   end

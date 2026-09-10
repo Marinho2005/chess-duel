@@ -1,11 +1,18 @@
-export type LiveMove = { san: string; from: string; to: string; promotion: string | null }
+export type LiveMove = { clock_ms?: number | null; san: string; from: string; to: string; promotion: string | null }
 export type BroadcastPlayer = {
   name: string
   title: string | null
   rating: number | null
   country_code?: string | null
 }
+export type BroadcastClockSnapshot = {
+  white_ms: number | null
+  black_ms: number | null
+  think_time_ms: number | null
+  sampled_at_ms: number
+}
 export type BroadcastLiveGame = {
+  live_clock?: BroadcastClockSnapshot | null
   game_id: string
   tournament_id: string
   tournament: string

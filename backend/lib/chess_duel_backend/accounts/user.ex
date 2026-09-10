@@ -6,6 +6,9 @@ defmodule ChessDuelBackend.Accounts.User do
   @foreign_key_type :binary_id
   schema "users" do
     field :email, :string
+    field :role, Ecto.Enum, values: [:user, :admin], default: :user
+    field :account_status, Ecto.Enum, values: [:active, :suspended, :banned], default: :active
+    field :suspended_until, :utc_datetime_usec
     field :nickname, :string
     field :country, :string
     field :country_code, :string

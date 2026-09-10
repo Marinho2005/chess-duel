@@ -19,7 +19,7 @@ function playerMeta(title: string | null, rating: number | null) {
         <p><strong :title="game.white.name">{{ game.white.name }} <ProfileCountryFlag :code="game.white.country_code" /></strong><small>{{ playerMeta(game.white.title, game.white.rating) }}</small></p>
         <p><strong :title="game.black.name">{{ game.black.name }} <ProfileCountryFlag :code="game.black.country_code" /></strong><small>{{ playerMeta(game.black.title, game.black.rating) }}</small></p>
       </div>
-      <GameReadonlyBoard :fen="game.fen" :last-move="lastMove" :label="`Posição de ${game.white.name} contra ${game.black.name}`" />
+      <GameReadonlyBoard :animation-duration="300" :fen="game.fen" :last-move="lastMove" :label="`Posição de ${game.white.name} contra ${game.black.name}`" />
     </NuxtLink>
   </article>
 </template>

@@ -33,11 +33,17 @@ defmodule ChessDuelBackendWeb.UserSocket do
       true ->
         case Accounts.get_user_by_api_token(token) do
           {user, _token_inserted_at} ->
-            {:ok,
-             socket
-             |> assign(:current_user, user)
-             |> assign(:user_id, user.id)
-             |> assign(:identity_type, :user)}
+            case ChessDuelBackend.Accounts.AccountAccess.check(user) do
+              :ok ->
+                {:ok,
+                 socket
+                 |> assign(:current_user, user)
+                 |> assign(:user_id, user.id)
+                 |> assign(:identity_type, :user)}
+
+              {:error, _} ->
+                :error
+            end
 
           nil ->
             :error

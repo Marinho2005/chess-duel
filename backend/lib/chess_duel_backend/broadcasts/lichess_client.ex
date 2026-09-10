@@ -103,14 +103,15 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
 
   defp fetch_round(http, %{tour: tour, round: round}) do
     json_path = "/api/broadcast/#{tour["slug"]}/#{round["slug"]}/#{round["id"]}"
-    pgn_path = "/api/broadcast/round/#{round["id"]}.pgn?clocks=false&comments=false"
+    pgn_path = "/api/broadcast/round/#{round["id"]}.pgn?clocks=true&comments=true"
 
     with {:ok, json_body} <- get(http, json_path, "application/json"),
+         sampled_at_ms = System.system_time(:millisecond),
          {:ok, round_data} <- Jason.decode(json_body),
          true <- valid_round?(round_data),
          {:ok, pgn} <- get(http, pgn_path, "application/x-chess-pgn"),
          {:ok, parsed_games} <- PgnParser.parse(pgn) do
-      {:ok, normalize_round(round_data, parsed_games, tour)}
+      {:ok, normalize_round(round_data, parsed_games, tour, sampled_at_ms)}
     else
       false -> {:error, :invalid_response}
       {:error, %Jason.DecodeError{}} -> {:error, :invalid_response}
@@ -121,7 +122,8 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
   defp normalize_round(
          %{"tour" => tour, "round" => round, "games" => games},
          parsed_games,
-         source_tour
+         source_tour,
+         sampled_at_ms
        ) do
     parsed_by_id =
       Map.new(parsed_games, fn parsed ->
@@ -134,14 +136,39 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
            %{} = parsed <- parsed_by_id[id],
            [white, black | _] <- game["players"] do
         moves = parsed["moves"] || []
-        [normalize_game(id, tour, round, game, white, black, parsed, moves, source_tour)]
+
+        [
+          normalize_game(
+            id,
+            tour,
+            round,
+            game,
+            white,
+            black,
+            parsed,
+            moves,
+            source_tour,
+            sampled_at_ms
+          )
+        ]
       else
         _ -> []
       end
     end)
   end
 
-  defp normalize_game(id, tour, round, game, white, black, parsed, moves, source_tour) do
+  defp normalize_game(
+         id,
+         tour,
+         round,
+         game,
+         white,
+         black,
+         parsed,
+         moves,
+         source_tour,
+         sampled_at_ms
+       ) do
     headers = parsed["headers"] || %{}
     last_move = List.last(moves)
 
@@ -160,9 +187,28 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
       fen: parsed["fen"] || game["fen"],
       last_move: last_move,
       moves: moves,
+      live_clock: live_clock(game, white, black, parsed, sampled_at_ms),
       lichess_url: headers["GameURL"] || "#{round["url"]}/#{id}"
     }
   end
+
+  # Lichess clocks are centiseconds; thinkTime is seconds since the last move.
+  # JSON and PGN are separate requests: never attach an old turn's clock to a newer board.
+  defp live_clock(game, white, black, parsed, sampled_at_ms) do
+    if game["fen"] == parsed["fen"] do
+      %{
+        white_ms: nonnegative_scaled(white["clock"], 10),
+        black_ms: nonnegative_scaled(black["clock"], 10),
+        think_time_ms: nonnegative_scaled(game["thinkTime"], 1_000),
+        sampled_at_ms: sampled_at_ms
+      }
+    end
+  end
+
+  defp nonnegative_scaled(value, scale) when is_number(value) and value >= 0,
+    do: round(value * scale)
+
+  defp nonnegative_scaled(_, _), do: nil
 
   defp slugify(value) when is_binary(value) do
     value

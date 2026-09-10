@@ -16,6 +16,8 @@ const confirmationPending = ref(false)
 const sessionExpired = computed(() => route.query.session === 'expired')
 const config = useRuntimeConfig()
 const oauthError = computed(() => {
+  if (route.query.oauth_error === 'account_banned') return 'Sua conta foi banida.'
+  if (route.query.oauth_error === 'account_suspended') return 'Sua conta está suspensa temporariamente.'
   if (route.query.oauth_error === 'oauth_not_configured') {
     return 'O login social ainda não foi configurado no servidor.'
   }

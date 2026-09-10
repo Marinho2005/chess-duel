@@ -1,0 +1,20 @@
+PASS page /admin
+PASS page /admin/users
+PASS suspend + existing token 403 + socket disconnected
+PASS ban + reactivate + audit preserved
+Traceback (most recent call last):
+  File "/home/vimar/fullstack-projects/chess_duel/backend/tmp/admin-verification/browser.py", line 63, in <module>
+    click(label)
+  File "/home/vimar/fullstack-projects/chess_duel/backend/tmp/admin-verification/browser.py", line 18, in click
+    run('eval', "Array.from(document.querySelectorAll('button')).find(el => el.textContent.trim() === " + json.dumps(label) + ").click()")
+  File "/home/vimar/fullstack-projects/chess_duel/backend/tmp/admin-verification/browser.py", line 7, in run
+    if r.returncode: raise RuntimeError(r.stdout+r.stderr)
+RuntimeError: ✗ Evaluation error: TypeError: Cannot read properties of undefined (reading 'click')
+    at <anonymous>:1:118
+
+Traceback (most recent call last):
+  File "/home/vimar/fullstack-projects/chess_duel/backend/tmp/admin-verification/run.py", line 13, in <module>
+    subprocess.run(['python3',str(folder/'browser.py')],check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/home/vimar/fullstack-projects/chess_duel/backend/tmp/admin-verification/browser.py']' returned non-zero exit status 1.

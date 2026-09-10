@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, ChevronDown, LogOut, Megaphone, Menu, Settings, UserPlus, X } from 'lucide-vue-next'
+import { Bell, ChevronDown, LogOut, Megaphone, Menu, Settings, Shield, UserPlus, X } from 'lucide-vue-next'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -158,6 +158,7 @@ onBeforeUnmount(() => {
             <p class="notification-empty">Nenhuma mensagem nova.</p>
           </section>
         </div>
+        <NuxtLink v-if="auth.user?.role === 'admin'" class="settings-trigger" to="/admin" aria-label="Administração" title="Administração"><Shield :size="19" /></NuxtLink>
         <NuxtLink v-if="auth.user" class="settings-trigger" to="/settings/profile" aria-label="Configurações" title="Configurações">
           <Settings :size="21" aria-hidden="true" />
         </NuxtLink>
@@ -181,6 +182,7 @@ onBeforeUnmount(() => {
     <nav v-if="mobileOpen" id="mobile-navigation" class="mobile-nav" aria-label="Navegação principal mobile">
       <NuxtLink v-for="item in items" :key="item.label" :to="item.to" :class="{ active: isActive(item) }">{{ item.label }}</NuxtLink>
       <NuxtLink v-if="auth.user" class="mobile-notifications" to="/social/friends"><Bell :size="18" aria-hidden="true" />Notificações <span v-if="notificationCount">{{ notificationCount > 9 ? '9+' : notificationCount }}</span></NuxtLink>
+      <NuxtLink v-if="auth.user?.role === 'admin'" to="/admin">Administração</NuxtLink>
       <NuxtLink to="/settings/profile">Configurações</NuxtLink>
       <span class="mobile-social-label">Social</span>
       <NuxtLink to="/social/friends">Amigos</NuxtLink>

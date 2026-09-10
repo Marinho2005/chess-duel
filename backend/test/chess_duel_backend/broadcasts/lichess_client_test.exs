@@ -9,7 +9,7 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
 
       cond do
         String.contains?(url, "/api/broadcast/top?") -> Process.get(:official_response)
-        String.ends_with?(url, ".pgn?clocks=false&comments=false") -> Process.get(:pgn_response)
+        String.ends_with?(url, ".pgn?clocks=true&comments=true") -> Process.get(:pgn_response)
         true -> Process.get(:round_response)
       end
     end
@@ -34,6 +34,28 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
     assert Enum.map(game.moves, & &1["san"]) == ["e4", "e5", "Nf3"]
     assert game.last_move["from"] == "g1"
     assert game.lichess_url =~ "/AbCd1234"
+  end
+
+  test "keeps Lichess thinking time and converts clock centiseconds to milliseconds" do
+    data = round_json()
+    data = put_in(data, ["games", Access.at(0), "thinkTime"], 1312)
+    data = put_in(data, ["games", Access.at(0), "players", Access.at(0), "clock"], 398_800)
+    data = put_in(data, ["games", Access.at(0), "players", Access.at(1), "clock"], 381_200)
+    Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(data)}})
+    before = System.system_time(:millisecond)
+    assert {:ok, [game]} = LichessClient.fetch_live_games(http_client: FakeHTTP)
+    assert game.live_clock.white_ms == 3_988_000
+    assert game.live_clock.black_ms == 3_812_000
+    assert game.live_clock.think_time_ms == 1_312_000
+    assert game.live_clock.sampled_at_ms >= before
+    assert game.live_clock.sampled_at_ms <= System.system_time(:millisecond)
+  end
+
+  test "does not apply JSON clocks to a different PGN position" do
+    data = put_in(round_json(), ["games", Access.at(0), "fen"], "older-position")
+    Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(data)}})
+    assert {:ok, [game]} = LichessClient.fetch_live_games(http_client: FakeHTTP)
+    assert game.live_clock == nil
   end
 
   test "returns an empty list when no official broadcast is live" do

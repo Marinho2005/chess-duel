@@ -3,11 +3,12 @@ import { Socket, type Channel } from 'phoenix'
 import { ArrowLeft, ExternalLink } from 'lucide-vue-next'
 import { Chess } from 'chess.js'
 import type { Key } from '@lichess-org/chessground/types'
-import type { BroadcastLiveGame, LiveMove } from '~/types/live-games'
+import type { BroadcastLiveGame, BroadcastClockSnapshot, LiveMove } from '~/types/live-games'
 import type { Evaluation } from '~/types/game-review'
 import EvaluationBar from '~/components/review/EvaluationBar.vue'
 import { buildReplayPositions } from '~/utils/chessMoves'
 import { soundForSan } from '~/utils/gameSound'
+import { broadcastClocks, formatBroadcastClock, createBroadcastClockEstimate } from '~/utils/broadcastClocks'
 
 definePageMeta({ middleware: 'auth', layout: false })
 
@@ -30,19 +31,24 @@ const evaluatingPly = ref<number | null>(null)
 const evaluationError = ref(false)
 let socket: Socket | null = null
 let channel: Channel | null = null
-let latestReceivedPly = 0
-const soundTimers: Array<ReturnType<typeof setTimeout>> = []
+const livePly = ref(0)
+const moveDuration = 300
+let playbackTimer: ReturnType<typeof setTimeout> | null = null
+let clockTimer: ReturnType<typeof setInterval> | null = null
+const clockNow = ref(0)
+const clockEstimate = createBroadcastClockEstimate()
+const broadcastEnded = ref(false)
 
 const replayPositions = computed(() => buildReplayPositions(game.value?.moves || [], game.value?.initial_fen || undefined))
-const displayedPly = computed(() => viewedPly.value ?? game.value?.moves.length ?? 0)
+const displayedPly = computed(() => viewedPly.value ?? livePly.value)
 const viewingHistory = computed(() => viewedPly.value !== null)
 const displayedPosition = computed(() => replayPositions.value[displayedPly.value])
 const displayedEvaluation = computed(() => evaluations.value[displayedPly.value] || null)
-const displayedFen = computed(() => viewingHistory.value
+const displayedFen = computed(() => (viewingHistory.value || livePly.value < (game.value?.moves.length ?? 0))
   ? displayedPosition.value?.fen || game.value?.fen || ''
   : game.value?.fen || '')
 const displayedLastMove = computed<[Key, Key] | null>(() => {
-  if (viewingHistory.value) {
+  if (viewingHistory.value || livePly.value < (game.value?.moves.length ?? 0)) {
     const move = displayedPosition.value?.lastMove
     return move ? [move[0] as Key, move[1] as Key] : null
   }
@@ -50,6 +56,37 @@ const displayedLastMove = computed<[Key, Key] | null>(() => {
     ? [game.value.last_move.from as Key, game.value.last_move.to as Key]
     : null
 })
+const recordedClocks = computed(() => {
+  const recorded = broadcastClocks(game.value?.moves || [], displayedPly.value, game.value?.initial_fen)
+  const live = game.value?.live_clock
+  return !viewingHistory.value && displayedPly.value === game.value?.moves.length && live
+    ? { white: live.white_ms ?? recorded.white, black: live.black_ms ?? recorded.black }
+    : recorded
+})
+const activeClock = computed(() => completed.value || broadcastEnded.value || state.value === 'ended'
+  ? null
+  : displayedFen.value.split(' ')[1] === 'b' ? 'black' : 'white')
+const estimatingClock = computed(() => !viewingHistory.value
+  && displayedPly.value === game.value?.moves.length && activeClock.value !== null)
+const displayedClocks = computed(() => ({
+  white: clockEstimate.remaining(recordedClocks.value.white, estimatingClock.value && activeClock.value === 'white', clockNow.value),
+  black: clockEstimate.remaining(recordedClocks.value.black, estimatingClock.value && activeClock.value === 'black', clockNow.value),
+}))
+watch(game, (snapshot) => {
+  if (!snapshot) return
+  const clocks = broadcastClocks(snapshot.moves, snapshot.moves.length, snapshot.initial_fen)
+  const now = performance.now()
+  clockEstimate.sync(`${snapshot.game_id}:${snapshot.moves.length}:${snapshot.fen}`, snapshot.live_clock?.white_ms ?? clocks.white, snapshot.live_clock?.black_ms ?? clocks.black, now, snapshot.live_clock)
+  clockNow.value = now
+}, { flush: 'sync' })
+
+function clockTitle(color: 'white' | 'black') {
+  if (displayedClocks.value[color] === null) return 'Tempo não informado pela transmissão'
+  return estimatingClock.value && activeClock.value === color
+    ? 'Tempo estimado, sincronizado com os dados da transmissão'
+    : 'Último tempo registrado até este lance pela transmissão'
+}
+
 const suggestedLine = computed(() => {
   const variation = principalVariations.value[displayedPly.value] || []
   if (!variation.length || !displayedFen.value) return ''
@@ -71,6 +108,8 @@ const suggestedLine = computed(() => {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleHistoryKeydown)
+  clockNow.value = performance.now()
+  clockTimer = setInterval(() => { clockNow.value = performance.now() }, 250)
   auth.restoreSession()
   if (!auth.token || !(await auth.fetchCurrentUser())) {
     await navigateTo('/')
@@ -93,11 +132,16 @@ onMounted(async () => {
   channel = socket.channel(`broadcast_watch:${gameId.value}`, {})
   channel.on('broadcast_move', applyMove)
   channel.on('broadcast_evaluation', applyEvaluation)
-  channel.on('broadcast_ended', () => { if (roundId.value) void loadRoundGame(); else state.value = 'ended' })
+  channel.on('broadcast_ended', () => {
+    broadcastEnded.value = true
+    state.value = 'ended'
+    if (roundId.value) void loadRoundGame()
+  })
   channel.join()
     .receive('ok', (snapshot: BroadcastLiveGame) => {
+      if (staleSnapshot(snapshot)) return
+      broadcastEnded.value = false
       game.value = snapshot
-      latestReceivedPly = snapshot.moves.length
       state.value = 'loaded'
       requestEvaluation(snapshot.moves.length)
     })
@@ -110,25 +154,33 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   disposed = true
   if (refreshTimer) clearInterval(refreshTimer)
+  if (clockTimer) clearInterval(clockTimer)
   channel?.off('broadcast_move')
   channel?.off('broadcast_evaluation')
   channel?.off('broadcast_ended')
   channel?.leave()
   socket?.disconnect()
   window.removeEventListener('keydown', handleHistoryKeydown)
-  soundTimers.forEach(clearTimeout)
+  stopPlayback()
   channel = null
   socket = null
 })
+
+function staleSnapshot(snapshot: { moves: LiveMove[]; live_clock?: BroadcastClockSnapshot | null }) {
+  if (!game.value || snapshot.moves.length > game.value.moves.length) return false
+  const currentSample = game.value.live_clock?.sampled_at_ms
+  const incomingSample = snapshot.live_clock?.sampled_at_ms
+  return currentSample != null && incomingSample != null && incomingSample < currentSample
+}
 
 async function loadRoundGame() {
   const result = await api.request<{ games: BroadcastLiveGame[] }>(`/api/broadcasts/rounds/${encodeURIComponent(roundId.value)}/games`)
   if (disposed) return
   const snapshot = result.data?.games.find(item => item.game_id === gameId.value)
   if (snapshot) {
+    if (staleSnapshot(snapshot)) return
     if (game.value && snapshot.moves.length < game.value.moves.length && snapshot.result === '*') return
     game.value = snapshot
-    latestReceivedPly = snapshot.moves.length
     state.value = 'loaded'
     if (viewedPly.value !== null) viewedPly.value = Math.min(viewedPly.value, snapshot.moves.length)
   } else if (!game.value) {
@@ -136,24 +188,54 @@ async function loadRoundGame() {
   }
 }
 
-function applyMove(payload: { fen: string; last_move: LiveMove | null; moves: LiveMove[] }) {
-  if (!game.value || completed.value) return
-  const wasAtLivePosition = viewedPly.value === null
-  const newMoves = payload.moves.slice(latestReceivedPly)
-  newMoves.forEach((move, index) => {
-    soundTimers.push(setTimeout(() => sounds.play(soundForSan(move.san)), index * 180))
-  })
-  latestReceivedPly = payload.moves.length
-  game.value = { ...game.value, fen: payload.fen, last_move: payload.last_move, moves: payload.moves }
-  if (wasAtLivePosition) viewedPly.value = null
+function applyMove(payload: { fen: string; last_move: LiveMove | null; moves: LiveMove[]; live_clock?: BroadcastClockSnapshot | null }) {
+  if (!game.value || completed.value || staleSnapshot(payload)) return
+  broadcastEnded.value = false
+  game.value = { ...game.value, fen: payload.fen, last_move: payload.last_move, moves: payload.moves, live_clock: payload.live_clock }
   state.value = 'loaded'
   requestEvaluation(payload.moves.length)
 }
+
+function stopPlayback() {
+  if (playbackTimer) clearTimeout(playbackTimer)
+  playbackTimer = null
+}
+
+function playNextMove() {
+  if (!game.value || livePly.value >= game.value.moves.length) return
+  livePly.value += 1
+  const move = game.value.moves[livePly.value - 1]
+  if (move) sounds.play(soundForSan(move.san))
+  playbackTimer = setTimeout(() => {
+    playbackTimer = null
+    playNextMove()
+  }, moveDuration + 60)
+}
+
+// HTTP and channel updates share playback, so batches preserve each intermediate position.
+watch(game, (snapshot, previous) => {
+  if (!snapshot) return
+  const extendsHistory = previous && snapshot.initial_fen === previous.initial_fen
+    && snapshot.moves.length >= previous.moves.length
+    && previous.moves.every((move, index) => {
+      const next = snapshot.moves[index]
+      return next?.from === move.from && next.to === move.to && next.promotion === move.promotion
+    })
+  if (!extendsHistory || viewingHistory.value) {
+    stopPlayback()
+    livePly.value = snapshot.moves.length
+    if (viewedPly.value !== null) viewedPly.value = Math.min(viewedPly.value, snapshot.moves.length)
+  } else if (!playbackTimer) {
+    playNextMove()
+  }
+})
 
 function selectPly(ply: number) {
   if (!game.value) return
   const target = Math.min(Math.max(ply, 0), game.value.moves.length)
   if (target === displayedPly.value) return
+  stopPlayback()
+  livePly.value = game.value.moves.length
   viewedPly.value = target === game.value.moves.length ? null : target
   if (target > 0) sounds.play(soundForSan(game.value.moves[target - 1]?.san))
   requestEvaluation(target)
@@ -222,6 +304,7 @@ function playerMeta(title: string | null, rating: number | null) {
         <article class="player-bar">
           <span class="piece" aria-hidden="true">♟</span>
           <div><strong :title="game.black.name">{{ game.black.name }} <ProfileCountryFlag :code="game.black.country_code" /></strong><small>{{ playerMeta(game.black.title, game.black.rating) }}</small></div>
+          <span class="broadcast-clock" :class="{ active: activeClock === 'black', unavailable: displayedClocks.black === null }" :title="clockTitle('black')" :aria-label="`Tempo das pretas: ${formatBroadcastClock(displayedClocks.black)}`">{{ formatBroadcastClock(displayedClocks.black) }}</span>
         </article>
         <div class="board-with-evaluation">
           <div v-if="!completed" class="evaluation-rail" :aria-busy="evaluatingPly === displayedPly" :title="evaluationError ? 'Avaliação temporariamente indisponível' : 'Avaliação Stockfish'">
@@ -229,12 +312,13 @@ function playerMeta(title: string | null, rating: number | null) {
             <span v-if="evaluatingPly === displayedPly" class="evaluation-loading" aria-label="Stockfish analisando">•••</span>
           </div>
           <div class="board-frame">
-            <GameReadonlyBoard :fen="displayedFen" :last-move="displayedLastMove" :label="`Broadcast de ${game.white.name} contra ${game.black.name}`" />
+            <GameReadonlyBoard :animation-duration="moveDuration" :fen="displayedFen" :last-move="displayedLastMove" :label="`Broadcast de ${game.white.name} contra ${game.black.name}`" />
           </div>
         </div>
         <article class="player-bar">
           <span class="piece" aria-hidden="true">♙</span>
           <div><strong :title="game.white.name">{{ game.white.name }} <ProfileCountryFlag :code="game.white.country_code" /></strong><small>{{ playerMeta(game.white.title, game.white.rating) }}</small></div>
+          <span class="broadcast-clock" :class="{ active: activeClock === 'white', unavailable: displayedClocks.white === null }" :title="clockTitle('white')" :aria-label="`Tempo das brancas: ${formatBroadcastClock(displayedClocks.white)}`">{{ formatBroadcastClock(displayedClocks.white) }}</span>
         </article>
       </div>
       <aside class="game-panel">
@@ -272,12 +356,16 @@ function playerMeta(title: string | null, rating: number | null) {
 </template>
 
 <style scoped>
+.broadcast-clock { min-width: 6.5ch; padding: .5rem .65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-strong); color: var(--text-muted); font: 700 clamp(1.05rem, 2.2vw, 1.6rem)/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
+.broadcast-clock.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.broadcast-clock.unavailable { color: var(--text-muted); background: var(--surface-strong); border-color: var(--border); }
+
 .custom-position-moves { display:flex; flex-wrap:wrap; gap:.4rem; }.custom-position-moves button { padding:.5rem; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:5px; cursor:pointer; }.custom-position-moves button[aria-pressed="true"] { border-color:var(--accent); }
 .header-actions { display:flex; align-items:center; gap:.5rem; margin-left:auto; }.back-link { display:flex; align-items:center; gap:.4rem; color:var(--text); text-decoration:none; }.back-link:hover { color:var(--accent); text-decoration:underline; }.sound-toggle { display:inline-flex; align-items:center; gap:.3rem; padding:.3rem .45rem; color:var(--text); background:transparent; border:1px solid var(--border); border-radius:8px; font:inherit; cursor:pointer; }.sound-toggle span { font-size:.72rem; }.sound-toggle:hover { color:var(--accent); background:var(--surface-hover); border-color:var(--accent); }
 .watch-page { min-height:calc(100vh - 60px); padding:0 clamp(1rem,3vw,2.5rem) 1.5rem; color:var(--text); background:var(--bg); font-family:Inter,system-ui,sans-serif; }
 .watch-layout { display:grid; grid-template-columns:minmax(420px,760px) minmax(290px,360px); justify-content:center; align-items:start; gap:clamp(1.2rem,3vw,2.5rem); max-width:1400px; margin:auto; }
 .board-column { display:grid; width:min(100%,760px); gap:.7rem; min-width:0; justify-self:end; }.board-with-evaluation { display:flex; width:min(100%,calc(100dvh - 240px)); min-width:0; justify-self:center; align-items:stretch; gap:.55rem; }.board-frame { width:auto; min-width:0; flex:1; }.evaluation-rail { position:relative; display:flex; width:30px; min-width:30px; align-self:stretch; }.evaluation-loading { position:absolute; right:2px; bottom:6px; left:2px; z-index:5; color:#f7f4ee; font-size:.58rem; font-weight:900; letter-spacing:-.08em; text-align:center; text-shadow:0 1px 2px #000; animation:evaluation-pulse 900ms ease-in-out infinite alternate; }@keyframes evaluation-pulse { to { opacity:.35; } }
-.player-bar { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:.8rem; min-height:66px; padding:.65rem .85rem; background:color-mix(in srgb,var(--surface) 94%,transparent); border:1px solid var(--border-subtle); border-radius:13px; }.player-bar .piece { display:grid; width:44px; height:44px; place-items:center; color:var(--accent-ink); background:var(--accent); border-radius:50%; font-size:1.7rem; }.player-bar div { display:grid; min-width:0; gap:.12rem; }.player-bar strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.player-bar small { color:var(--text-muted); }
+.player-bar { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:.8rem; min-height:66px; padding:.65rem .85rem; background:color-mix(in srgb,var(--surface) 94%,transparent); border:1px solid var(--border-subtle); border-radius:13px; }.player-bar .piece { display:grid; width:44px; height:44px; place-items:center; color:var(--accent-ink); background:var(--accent); border-radius:50%; font-size:1.7rem; }.player-bar div { display:grid; min-width:0; gap:.12rem; }.player-bar strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.player-bar small { color:var(--text-muted); }
 .game-panel { display:flex; min-height:min(760px,calc(100vh - 85px)); flex-direction:column; overflow:hidden; background:color-mix(in srgb,var(--surface) 96%,transparent); border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow); }.panel-heading { padding:1.5rem; border-bottom:1px solid var(--border); }.panel-heading h1 { margin:.55rem 0 .3rem; font:500 1.55rem Georgia,serif; }.panel-heading>p { margin:0; color:var(--text-muted); }.live-badge { display:inline-block; padding:.3rem .5rem; color:var(--danger); background:var(--danger-soft); border-radius:999px; font-size:.68rem; font-weight:800; letter-spacing:.05em; }
 .suggested-line { display:grid; gap:.32rem; margin-top:1rem; padding:.72rem .8rem; background:var(--surface-strong); border:1px solid var(--border-subtle); border-radius:9px; }.suggested-line strong { color:var(--text); font-size:.72rem; letter-spacing:.04em; text-transform:uppercase; }.suggested-line code,.suggested-line span { color:var(--text-muted); font:500 .82rem/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }.suggested-line code { color:var(--text); }
 .moves { display:flex; min-height:0; flex:1; flex-direction:column; gap:.85rem; padding:1.2rem 1.5rem; }.moves-title { display:flex; align-items:center; justify-content:space-between; gap:.6rem; }.moves-title h2 { margin:0; font:500 1.25rem Georgia,serif; }.moves-title>div { display:flex; align-items:center; gap:.3rem; }.moves-title button { min-width:28px; height:28px; padding:0 .45rem; color:var(--accent); background:var(--surface-strong); border:1px solid var(--border); border-radius:7px; font-size:.7rem; font-weight:800; cursor:pointer; }.moves-title button:disabled { opacity:.4; cursor:default; }.moves-title span { display:grid; min-width:42px; height:28px; place-items:center; color:var(--text-muted); background:var(--surface-strong); border-radius:999px; font-size:.7rem; }.empty-moves { margin:auto; color:var(--text-muted); text-align:center; }.keyboard-hint { color:var(--text-muted); font-size:.7rem; text-align:center; }.lichess-link { display:flex; align-items:center; justify-content:center; gap:.4rem; padding:1rem; color:var(--accent); border-top:1px solid var(--border); font-weight:700; text-decoration:none; }.lichess-link:hover { background:var(--surface-hover); }
