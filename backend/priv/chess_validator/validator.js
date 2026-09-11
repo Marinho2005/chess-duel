@@ -29,6 +29,13 @@ function validateMove(request) {
   }
 }
 
+function parseClock(comment) {
+  const match = comment?.match(/\[%clk\s+(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)\s*\]/)
+  if (!match) return null
+  const milliseconds = Math.round((Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])) * 1000)
+  return Number.isSafeInteger(milliseconds) ? milliseconds : null
+}
+
 function parsePgn(pgn) {
   const chunks = pgn.trim().split(/\n\s*\n(?=\[Event\s)/)
 
@@ -36,7 +43,9 @@ function parsePgn(pgn) {
     const chess = new Chess()
     chess.loadPgn(source, { strict: false })
     const headers = chess.getHeaders()
+    const comments = new Map(chess.getComments().map(({ fen, comment }) => [fen, comment]))
     const moves = chess.history({ verbose: true }).map((move) => ({
+      clock_ms: parseClock(comments.get(move.after)),
       san: move.san,
       from: move.from,
       to: move.to,

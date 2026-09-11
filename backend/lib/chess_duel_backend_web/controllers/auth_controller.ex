@@ -23,7 +23,8 @@ defmodule ChessDuelBackendWeb.AuthController do
              name: auth.info.name,
              avatar_url: auth.info.image,
              email_verified: email_verified?(auth)
-           }) do
+           }),
+         :ok <- oauth_account_access(user) do
       token = Accounts.generate_user_api_token(user)
       redirect(conn, external: frontend_callback_url(token))
     else
@@ -32,6 +33,13 @@ defmodule ChessDuelBackendWeb.AuthController do
   end
 
   def callback(conn, _params), do: oauth_error(conn, "invalid_oauth_callback")
+
+  defp oauth_account_access(user) do
+    case ChessDuelBackend.Accounts.AccountAccess.check(user) do
+      :ok -> :ok
+      {:error, %{error: code}} -> {:error, code}
+    end
+  end
 
   defp ensure_provider_configured(conn, _options) do
     provider = conn.params["provider"]

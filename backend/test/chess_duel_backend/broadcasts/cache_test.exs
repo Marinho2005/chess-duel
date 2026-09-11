@@ -32,6 +32,22 @@ defmodule ChessDuelBackend.Broadcasts.CacheTest do
     assert [] = Cache.list_games(cache)
   end
 
+  test "broadcasts clock synchronization even without a new move" do
+    first = Map.put(game("same", []), :live_clock, %{think_time_ms: 10_000, sampled_at_ms: 100_000})
+    second = %{first | live_clock: %{think_time_ms: 30_000, sampled_at_ms: 120_000}}
+    {:ok, responses} = Agent.start_link(fn -> [{:ok, [first]}, {:ok, [second]}] end)
+    client = fn -> Agent.get_and_update(responses, fn [next | rest] -> {next, rest} end) end
+    cache = start_supervised!({Cache, name: nil, client: client, auto_refresh: false})
+    Phoenix.PubSub.subscribe(ChessDuelBackend.PubSub, "broadcast_watch:game-1")
+    assert :ok = Cache.refresh(cache)
+    assert :ok = Cache.refresh(cache)
+
+    assert_receive %{
+      event: "broadcast_move",
+      payload: %{fen: "same", live_clock: %{think_time_ms: 30_000}}
+    }
+  end
+
   test "groups live games by tournament without mixing them" do
     open = game("open-fen", [])
 

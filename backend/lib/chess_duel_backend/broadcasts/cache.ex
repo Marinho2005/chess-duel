@@ -181,7 +181,8 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
           game_id: id,
           fen: game.fen,
           last_move: game.last_move,
-          moves: game.moves
+          moves: game.moves,
+          live_clock: Map.get(game, :live_clock)
         })
       end
     end)
@@ -190,7 +191,9 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
   defp changed?(nil, _game), do: false
 
   defp changed?(old, new),
-    do: {old.fen, length(old.moves), old.last_move} != {new.fen, length(new.moves), new.last_move}
+    do:
+      {old.fen, old.moves, old.last_move, Map.get(old, :live_clock)} !=
+        {new.fen, new.moves, new.last_move, Map.get(new, :live_clock)}
 
   defp emit_removals(previous, current) do
     previous

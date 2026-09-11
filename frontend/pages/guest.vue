@@ -122,7 +122,7 @@ async function leave() {
   <main class="guest-shell">
     <section class="guest-card">
       <span class="badge">CONVIDADO</span>
-      <div class="piece" aria-hidden="true">♟</div>
+      <BrandLogo class="piece" :show-word="false" aria-hidden="true" />
       <h1>Olá, {{ auth.guest?.nickname }}</h1>
       <p>{{ status }}</p>
 
@@ -160,10 +160,10 @@ async function leave() {
 </template>
 
 <style scoped>
-.guest-shell { display: grid; min-height: 100vh; place-items: center; padding: 1rem; color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e40 .7px, transparent .7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }
+.guest-shell { display: grid; min-height: 100vh; place-items: center; padding: 1rem; color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e40 .7px, transparent .7px); background-size: 5px 5px; font-family: var(--font-sans); }
 .guest-card { display: grid; width: min(540px, 100%); justify-items: center; gap: 1rem; padding: 2.2rem; text-align: center; background: #fffaf0e8; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px #6f45281c; }
 .badge { padding: .35rem .65rem; color: #7f5130; background: #ead7bc; border-radius: 999px; font-size: .7rem; font-weight: 800; letter-spacing: .1em; }
-.piece { color: #6f4528; font-size: 4rem; line-height: 1; }.guest-card h1 { margin: 0; font: 500 1.8rem Georgia, serif; }.guest-card p { margin: 0; color: #806d5d; }.guest-card > small, .room-waiting small { color: #8b7664; }
+.piece { color: #6f4528; font-size: 4rem; line-height: 1; }.guest-card h1 { margin: 0; font: 500 1.8rem var(--font-serif); }.guest-card p { margin: 0; color: #806d5d; }.guest-card > small, .room-waiting small { color: #8b7664; }
 .time-control { display: grid; width: 100%; gap: .45rem; color: #806d5d; font-size: .85rem; text-align: left; }.time-control select, .room-link-row input { min-width: 0; padding: .75rem; color: #3c2b20; background: #fffaf0; border: 1px solid #d9c7ae; border-radius: 9px; font: inherit; }
 .choices { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: .7rem; }.choices button, .room-link-row button, .leave { padding: .75rem 1rem; border: 1px solid #d9c7ae; border-radius: 9px; cursor: pointer; }.choices button:disabled { opacity: .6; cursor: default; }.primary { color: white; background: #6f4528; }.secondary { color: #7f5130; background: #f7eedf; }.danger { color: white; background: #a74c35; }
 .searching { display: flex; gap: .5rem; padding: .8rem; }.searching i { width: 10px; height: 10px; background: #668a57; border-radius: 50%; animation: pulse 1.2s infinite; }.searching i:nth-child(2) { animation-delay: .2s; }.searching i:nth-child(3) { animation-delay: .4s; }@keyframes pulse { 50% { opacity: .25; transform: scale(.75); } }

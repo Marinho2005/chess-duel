@@ -6,8 +6,9 @@ const props = withDefaults(defineProps<{
   fen: string
   orientation?: Color
   lastMove?: [Key, Key] | null
+  animationDuration?: number
   label?: string
-}>(), { orientation: 'white', lastMove: null, label: 'Tabuleiro de xadrez somente leitura' })
+}>(), { animationDuration: 180, orientation: 'white', lastMove: null, label: 'Tabuleiro de xadrez somente leitura' })
 
 const element = ref<HTMLElement | null>(null)
 let ground: Api | null = null
@@ -16,7 +17,7 @@ onMounted(async () => {
   const { Chessground } = await import('@lichess-org/chessground')
   if (element.value) ground = Chessground(element.value, config())
 })
-watch(() => [props.fen, props.orientation, props.lastMove], () => ground?.set(config()))
+watch(() => [props.fen, props.orientation, props.lastMove, props.animationDuration], () => ground?.set(config()))
 onBeforeUnmount(() => ground?.destroy())
 
 function config() {
@@ -27,7 +28,7 @@ function config() {
     lastMove: props.lastMove || undefined,
     coordinates: true,
     coordinatesOnSquares: true,
-    animation: { enabled: true, duration: 180 },
+    animation: { enabled: props.animationDuration > 0, duration: props.animationDuration },
     movable: { color: undefined },
     premovable: { enabled: false },
     draggable: { enabled: false },

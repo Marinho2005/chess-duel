@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, ChevronDown, LogOut, Megaphone, Menu, Settings, UserPlus, X } from 'lucide-vue-next'
+import { Bell, ChevronDown, LogOut, Megaphone, Menu, Settings, Shield, UserPlus, X } from 'lucide-vue-next'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
   <header class="app-header">
     <div class="header-inner">
       <NuxtLink class="brand" to="/lobby" aria-label="ChessDuel — Jogar">
-        <span aria-hidden="true">♟</span><strong>ChessDuel</strong>
+        <BrandLogo />
       </NuxtLink>
 
       <nav class="desktop-nav" aria-label="Navegação principal">
@@ -158,6 +158,7 @@ onBeforeUnmount(() => {
             <p class="notification-empty">Nenhuma mensagem nova.</p>
           </section>
         </div>
+        <NuxtLink v-if="auth.user?.role === 'admin'" class="settings-trigger" to="/admin" aria-label="Administração" title="Administração"><Shield :size="19" /></NuxtLink>
         <NuxtLink v-if="auth.user" class="settings-trigger" to="/settings/profile" aria-label="Configurações" title="Configurações">
           <Settings :size="21" aria-hidden="true" />
         </NuxtLink>
@@ -181,6 +182,7 @@ onBeforeUnmount(() => {
     <nav v-if="mobileOpen" id="mobile-navigation" class="mobile-nav" aria-label="Navegação principal mobile">
       <NuxtLink v-for="item in items" :key="item.label" :to="item.to" :class="{ active: isActive(item) }">{{ item.label }}</NuxtLink>
       <NuxtLink v-if="auth.user" class="mobile-notifications" to="/social/friends"><Bell :size="18" aria-hidden="true" />Notificações <span v-if="notificationCount">{{ notificationCount > 9 ? '9+' : notificationCount }}</span></NuxtLink>
+      <NuxtLink v-if="auth.user?.role === 'admin'" to="/admin">Administração</NuxtLink>
       <NuxtLink to="/settings/profile">Configurações</NuxtLink>
       <span class="mobile-social-label">Social</span>
       <NuxtLink to="/social/friends">Amigos</NuxtLink>
@@ -193,9 +195,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .app-header { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg-elevated) 94%, transparent); border-bottom: 1px solid var(--border-subtle); backdrop-filter: blur(16px); }
 .header-inner { display: flex; width: min(1440px, calc(100% - 3rem)); min-height: 60px; align-items: stretch; gap: 2.4rem; margin: auto; }
-.brand { display: flex; align-items: center; gap: .65rem; color: var(--text); text-decoration: none; }
-.brand > span { color: var(--accent); font-size: 1.8rem; line-height: 1; }
-.brand strong { font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; font-weight: 700; letter-spacing: -.035em; }
+.brand { display: flex; align-items: center; color: var(--text); font-size: 1.8rem; text-decoration: none; }
 .desktop-nav { display: flex; align-items: stretch; gap: 1.9rem; }
 .social-nav { position: relative; display: flex; }
 .social-trigger { display: flex; align-items: center; gap: .35rem; padding: 0; color: var(--text-muted); background: transparent; border: 0; font-weight: 600; cursor: pointer; }

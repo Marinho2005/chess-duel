@@ -15,7 +15,7 @@ defmodule Mix.Tasks.Puzzles.Import do
       Mix.raise("uso: mix puzzles.import [caminho.csv] [--limit 50000] [--minimum-popularity 80]")
     end
 
-    path = List.first(paths) || "priv/repo/lichess_puzzles.csv"
+    path = List.first(paths) || "priv/repo/lichess_db_puzzle.csv"
     unless File.regular?(path), do: Mix.raise("arquivo não encontrado: #{path}")
 
     Mix.Task.run("app.start")
