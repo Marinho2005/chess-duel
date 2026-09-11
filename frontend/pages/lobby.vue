@@ -655,10 +655,10 @@ async function logOut() {
 </template>
 
 <style scoped>
-.lobby-shell { --cream: #f4eddf; --panel: #fffaf0; --line: #dfcfb8; --ink: #3c2b20; --brown: #6f4528; min-height: 100vh; color: var(--ink); background-color: var(--cream); background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }
+.lobby-shell { --cream: #f4eddf; --panel: #fffaf0; --line: #dfcfb8; --ink: #3c2b20; --brown: #6f4528; min-height: 100vh; color: var(--ink); background-color: var(--cream); background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: var(--font-sans); }
 .content { display: grid; align-content: start; gap: 1.4rem; padding: 2rem; }
 .welcome, .panel { padding: 1.6rem; background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 18px; box-shadow: 0 14px 30px #6f452812; }
-.welcome { display: flex; align-items: center; justify-content: space-between; }.welcome h1, h2 { margin: 0; font-family: Georgia, serif; font-weight: 500; }.welcome p { margin: 0.4rem 0 0; color: #857060; }
+.welcome { display: flex; align-items: center; justify-content: space-between; }.welcome h1, h2 { margin: 0; font-family: var(--font-serif); font-weight: 500; }.welcome p { margin: 0.4rem 0 0; color: #857060; }
 .profile { display: flex; align-items: center; gap: 0.8rem; text-align: right; }.profile-link { display: grid; color: inherit; text-decoration: none; }.profile small, .player-row small, .online-card small { color: #8b7664; }.player-link { color: inherit; text-decoration: none; }.profile-link:hover, .player-link:hover { color: var(--brown); text-decoration: underline; }
 .avatar { display: grid; width: 46px; height: 46px; place-items: center; color: white; object-fit: cover; font-weight: 700; background: var(--brown); border-radius: 50%; }.avatar.small { width: 40px; height: 40px; }
 button { padding: 0.7rem 1rem; color: var(--ink); background: #f7eedf; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }button:hover:not(:disabled) { border-color: #b9996b; transform: translateY(-1px); }button:disabled { opacity: 0.6; cursor: default; }

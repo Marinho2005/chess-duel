@@ -26,7 +26,7 @@ async function logOut() {
 <template>
   <aside class="sidebar">
     <NuxtLink class="logo" to="/lobby" aria-label="ChessDuel — Desafios">
-      <span aria-hidden="true">♟</span><strong>ChessDuel</strong>
+      <BrandLogo />
     </NuxtLink>
 
     <nav aria-label="Navegação principal">
@@ -78,15 +78,13 @@ async function logOut() {
     linear-gradient(155deg, #21160e 0%, #342214 48%, #21170f 100%);
   border-right: 1px solid #8c673f;
   box-shadow: 12px 0 32px #3c24121a;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--font-sans);
   transition: background 220ms ease, color 220ms ease;
 }
 
-.logo { display: flex; align-items: center; gap: .6rem; color: var(--side-ink); text-decoration: none; }
-.logo > span { color: #efcb83; font-size: 1.65rem; filter: drop-shadow(0 3px 8px #e7b75d35); }
-.logo strong { font: 700 1.75rem Georgia, serif; letter-spacing: -.02em; }
+.logo { --brand-mark-color: #efcb83; display: flex; align-items: center; color: var(--side-ink); font-size: 1.75rem; text-decoration: none; }
 nav { display: grid; gap: .32rem; }
-nav a { position: relative; display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: .72rem; padding: .78rem .85rem; color: var(--side-muted); border: 1px solid transparent; border-radius: 11px; font: 650 .9rem Inter, system-ui, sans-serif; text-decoration: none; transition: color 190ms ease, background 190ms ease, border-color 190ms ease, transform 190ms ease; }
+nav a { position: relative; display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: .72rem; padding: .78rem .85rem; color: var(--side-muted); border: 1px solid transparent; border-radius: 11px; font: 650 .9rem var(--font-sans); text-decoration: none; transition: color 190ms ease, background 190ms ease, border-color 190ms ease, transform 190ms ease; }
 nav a::before { position: absolute; left: -1px; width: 3px; height: 0; content: ''; background: #e2ad55; border-radius: 0 4px 4px 0; transition: height 190ms ease; }
 nav a:hover, nav a:focus-visible { color: var(--side-ink); background: var(--side-hover); transform: translateX(2px); }
 nav a:focus-visible { outline: 2px solid #e4b866; outline-offset: 2px; }
@@ -100,7 +98,7 @@ nav a:hover svg, nav a:focus-visible svg, nav a.active svg { color: #efc477; }
 .nav-bots:hover svg, .nav-bots:focus-visible svg { transform: rotate(-5deg) scale(1.08); }
 .nav-profile:hover svg, .nav-profile:focus-visible svg { transform: rotate(18deg); }
 nav a.active svg { transform: scale(1.04); }
-.sidebar-bottom { display: grid; gap: .8rem; margin-top: auto; }.premium-card { display: flex; align-items: center; gap: .7rem; padding: .85rem; color: #efc979; background: linear-gradient(135deg,#bd83351c,#efbf6524); border: 1px solid #d7a35342; border-radius: 12px; }.premium-card div { display: grid; gap: .12rem; }.premium-card strong { font: 700 .86rem Georgia,serif; }.premium-card small { color: var(--side-muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; }
+.sidebar-bottom { display: grid; gap: .8rem; margin-top: auto; }.premium-card { display: flex; align-items: center; gap: .7rem; padding: .85rem; color: #efc979; background: linear-gradient(135deg,#bd83351c,#efbf6524); border: 1px solid #d7a35342; border-radius: 12px; }.premium-card div { display: grid; gap: .12rem; }.premium-card strong { font: 700 .86rem var(--font-serif); }.premium-card small { color: var(--side-muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; }
 .sidebar-controls { display: flex; justify-content: flex-end; gap: .55rem; }.sidebar-controls button { display: grid; width: 40px; height: 40px; place-items: center; padding: 0; color: var(--side-muted); background: #ffffff0a; border: 1px solid var(--side-line); border-radius: 10px; cursor: pointer; transition: color 180ms ease, background 180ms ease, transform 180ms ease; }.sidebar-controls button:hover,.sidebar-controls button:focus-visible { color: #f2cb82; background: #e3b55b20; transform: translateY(-1px); }.sidebar-controls button:focus-visible { outline: 2px solid #e4b866; outline-offset: 2px; }.logout span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -111,8 +109,7 @@ nav a.active svg { transform: scale(1.04); }
 
 @media (max-width: 760px) {
   .sidebar { position: sticky; width: 100%; height: auto; padding: .65rem .8rem; flex-direction: row; align-items: center; gap: .5rem; border-right: 0; border-bottom: 1px solid #8c673f; box-shadow: 0 8px 22px #3c24121a; }
-  .logo strong { font-size: 1.25rem; }
-  .logo > span { font-size: 1.3rem; }
+  .logo { font-size: 1.3rem; }
   nav { display: flex; flex: 1; justify-content: center; gap: .15rem; }
   nav a { display: flex; padding: .58rem; }
   nav a::before,nav a > span,.premium-card { display: none; }
@@ -121,5 +118,5 @@ nav a.active svg { transform: scale(1.04); }
   .sidebar-controls .logout { width: 38px; height: 38px; }
 }
 
-@media (max-width: 520px) { .logo strong { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }.sidebar { gap: .2rem; }.logo { padding: .35rem; }nav { justify-content: space-around; }nav a { padding: .52rem; } }
+@media (max-width: 520px) { .logo :deep(.brand-logo__word) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }.sidebar { gap: .2rem; }.logo { padding: .35rem; }nav { justify-content: space-around; }nav a { padding: .52rem; } }
 </style>

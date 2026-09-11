@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
   <header class="app-header">
     <div class="header-inner">
       <NuxtLink class="brand" to="/lobby" aria-label="ChessDuel — Jogar">
-        <span aria-hidden="true">♟</span><strong>ChessDuel</strong>
+        <BrandLogo />
       </NuxtLink>
 
       <nav class="desktop-nav" aria-label="Navegação principal">
@@ -195,9 +195,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .app-header { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg-elevated) 94%, transparent); border-bottom: 1px solid var(--border-subtle); backdrop-filter: blur(16px); }
 .header-inner { display: flex; width: min(1440px, calc(100% - 3rem)); min-height: 60px; align-items: stretch; gap: 2.4rem; margin: auto; }
-.brand { display: flex; align-items: center; gap: .65rem; color: var(--text); text-decoration: none; }
-.brand > span { color: var(--accent); font-size: 1.8rem; line-height: 1; }
-.brand strong { font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; font-weight: 700; letter-spacing: -.035em; }
+.brand { display: flex; align-items: center; color: var(--text); font-size: 1.8rem; text-decoration: none; }
 .desktop-nav { display: flex; align-items: stretch; gap: 1.9rem; }
 .social-nav { position: relative; display: flex; }
 .social-trigger { display: flex; align-items: center; gap: .35rem; padding: 0; color: var(--text-muted); background: transparent; border: 0; font-weight: 600; cursor: pointer; }

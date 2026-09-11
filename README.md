@@ -124,8 +124,7 @@ licença CC0. Não é necessário importar o arquivo inteiro. Baixe e descompact
 ```bash
 curl -L https://database.lichess.org/lichess_db_puzzle.csv.zst \
   -o backend/priv/repo/lichess_db_puzzle.csv.zst
-unzstd backend/priv/repo/lichess_db_puzzle.csv.zst \
-  -o backend/priv/repo/lichess_puzzles.csv
+unzstd backend/priv/repo/lichess_db_puzzle.csv.zst
 ```
 
 Depois das migrations, importe um subconjunto distribuído por rating:
@@ -133,7 +132,7 @@ Depois das migrations, importe um subconjunto distribuído por rating:
 ```bash
 cd backend
 mix ecto.migrate
-mix puzzles.import priv/repo/lichess_puzzles.csv
+mix puzzles.import
 ```
 
 Por padrão, o importador lê o arquivo em streaming, aceita popularidade mínima

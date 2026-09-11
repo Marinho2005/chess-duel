@@ -132,11 +132,11 @@ async function selectCategory(category: string) { await navigateTo({ path: '/ran
 </template>
 
 <style scoped>
-.page-shell { min-height: 100vh; color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: Inter, system-ui, sans-serif; }
+.page-shell { min-height: 100vh; color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: var(--font-sans); }
 .content { display: grid; width: min(980px, 100%); align-content: start; gap: 1.4rem; padding: 2rem; }
 header, .panel { padding: 1.6rem; background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 18px; box-shadow: 0 14px 30px #6f452812; }
 header p { margin: 0 0 .55rem; color: #6f4528; font-size: .72rem; font-weight: 800; letter-spacing: .12em; }
-h1 { margin: 0; font: 500 clamp(2rem, 5vw, 3rem)/1.1 Georgia, serif; }
+h1 { margin: 0; font: 500 clamp(2rem, 5vw, 3rem)/1.1 var(--font-serif); }
 header span { display: block; margin-top: .65rem; color: #806d5d; }
 .summary { margin-bottom: 1rem; color: #806d5d; font-size: .88rem; }.summary strong { color: #6f4528; }
 .state { margin: 0; padding: 2rem; color: #806d5d; text-align: center; border: 1px dashed #dfcfb8; border-radius: 12px; }.state.error { color: #9e3828; background: #f9ded5; border-style: solid; }

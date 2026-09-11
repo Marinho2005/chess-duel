@@ -193,7 +193,7 @@ const accessibleLabel = computed(() => {
   align-items: center;
   z-index: 3;
   pointer-events: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.67rem;
   font-weight: 800;
   letter-spacing: -0.045em;
