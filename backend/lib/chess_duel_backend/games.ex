@@ -104,6 +104,46 @@ defmodule ChessDuelBackend.Games do
     end)
   end
 
+  def active_game_for_user(user_id) when is_binary(user_id) do
+    in_memory =
+      GameServer.list_active_states()
+      |> Enum.find(fn state ->
+        state.status in ["in_progress", "waiting"] and
+          (state.white_player_id == user_id or state.black_player_id == user_id) and
+          is_binary(state.white_player_id) and is_binary(state.black_player_id)
+      end)
+
+    case in_memory do
+      %{game_id: game_id} ->
+        %{game_id: game_id}
+
+      nil ->
+        query =
+          from(g in Game,
+            where:
+              g.status in ["in_progress", "waiting"] and
+                (g.white_player_id == ^user_id or g.black_player_id == ^user_id) and
+                not is_nil(g.white_player_id) and not is_nil(g.black_player_id),
+            order_by: [desc: g.inserted_at],
+            limit: 1
+          )
+
+        case Repo.one(query) do
+          %Game{game_id: game_id} ->
+            case GameServer.get_state(game_id) do
+              {:ok, %{status: status}} when status in ["in_progress", "waiting"] ->
+                %{game_id: game_id}
+
+              _ ->
+                nil
+            end
+
+          nil ->
+            nil
+        end
+    end
+  end
+
   defp live_player(user, category, state),
     do: %{
       id: user.id,
@@ -122,6 +162,8 @@ defmodule ChessDuelBackend.Games do
     page = opts |> Keyword.get(:page, 1) |> max(1)
     per_page = opts |> Keyword.get(:per_page, 10) |> max(1) |> min(50)
     category = Keyword.get(opts, :category)
+    color = Keyword.get(opts, :color)
+    opponent = Keyword.get(opts, :opponent)
 
     base_query =
       from(game in Game,
@@ -130,6 +172,8 @@ defmodule ChessDuelBackend.Games do
         where: not is_nil(game.finished_at)
       )
       |> filter_history_category(category)
+      |> filter_history_color(color, user_id)
+      |> filter_history_opponent(opponent, user_id)
 
     total = Repo.aggregate(base_query, :count, :id)
 
@@ -169,6 +213,28 @@ defmodule ChessDuelBackend.Games do
       )
 
   defp filter_history_category(query, _category), do: query
+
+  defp filter_history_color(query, :white, user_id),
+    do: where(query, [game], game.white_player_id == ^user_id)
+
+  defp filter_history_color(query, :black, user_id),
+    do: where(query, [game], game.black_player_id == ^user_id)
+
+  defp filter_history_color(query, _color, _user_id), do: query
+
+  defp filter_history_opponent(query, opponent, user_id) when is_binary(opponent) and opponent != "" do
+    term = "%#{opponent}%"
+
+    from(game in query,
+      join: w in assoc(game, :white_player),
+      join: b in assoc(game, :black_player),
+      where:
+        (game.white_player_id == ^user_id and ilike(b.nickname, ^term)) or
+          (game.black_player_id == ^user_id and ilike(w.nickname, ^term))
+    )
+  end
+
+  defp filter_history_opponent(query, _opponent, _user_id), do: query
 
   def public_stats_for_user(user_id) when is_binary(user_id) do
     games =

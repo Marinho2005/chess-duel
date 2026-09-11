@@ -80,6 +80,7 @@ defmodule ChessDuelBackendWeb.Router do
     patch "/clubs/:id/memberships/:membership_id/promote", ClubController, :promote
     delete "/clubs/:id/memberships/:membership_id", ClubController, :delete_membership
     get "/users/me/games", GameHistoryController, :index
+    get "/games/active", LiveGameController, :active
     get "/bots", BotGameController, :index
     post "/bot-games", BotGameController, :create
     post "/games/:id/analyze", GameAnalysisController, :create

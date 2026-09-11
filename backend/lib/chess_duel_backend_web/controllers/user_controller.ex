@@ -33,7 +33,10 @@ defmodule ChessDuelBackendWeb.UserController do
         history =
           Games.list_finished_games_for_user(user.id,
             page: parse_page(conn.params["page"]),
-            per_page: 10
+            per_page: 10,
+            category: parse_filter_category(conn.params["category"]),
+            color: parse_color(conn.params["color"]),
+            opponent: conn.params["q"] || conn.params["opponent"]
           )
 
         friends = Social.public_friends(user.id)
@@ -137,6 +140,16 @@ defmodule ChessDuelBackendWeb.UserController do
     do: String.to_existing_atom(value)
 
   defp parse_category(_), do: :blitz
+
+  defp parse_filter_category(value) when value in ~w(bullet blitz rapid),
+    do: String.to_existing_atom(value)
+
+  defp parse_filter_category(_), do: nil
+
+  defp parse_color(value) when value in ~w(white black),
+    do: String.to_existing_atom(value)
+
+  defp parse_color(_), do: nil
 
   defp count_profile_view(%User{} = user, %User{id: viewer_id}) when viewer_id != user.id do
     {1, [updated]} =

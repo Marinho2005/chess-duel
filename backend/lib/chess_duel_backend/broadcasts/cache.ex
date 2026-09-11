@@ -21,7 +21,6 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
   def list_tournament_games(tournament_id, server \\ __MODULE__),
     do: GenServer.call(server, {:list_tournament_games, tournament_id})
 
-  def get_game(game_id, server \\ __MODULE__), do: GenServer.call(server, {:get_game, game_id})
   def refresh(server \\ __MODULE__), do: GenServer.call(server, :refresh, 30_000)
 
   @impl true
@@ -91,8 +90,6 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
     {:reply, games, state}
   end
 
-  def handle_call({:get_game, id}, _from, state), do: {:reply, Map.fetch(state.games, id), state}
-
   def handle_call(:refresh, _from, state) do
     {reply, next_state, _delay} = update(state)
     {:reply, reply, next_state}
@@ -102,7 +99,7 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
   def handle_info(:refresh, %{refresh_task: nil} = state) do
     task =
       Task.Supervisor.async_nolink(
-        ChessDuelBackend.BroadcastAnalysisSupervisor,
+        ChessDuelBackend.BroadcastFetchSupervisor,
         fn -> fetch_games(state.client) end
       )
 
@@ -151,8 +148,6 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
           end)
           |> Map.new(&{&1.game_id, &1})
 
-        emit_changes(state.games, next)
-        emit_removals(state.games, next)
         {:ok, %{state | games: next}, state.interval}
 
       {:error, reason} ->
@@ -173,38 +168,4 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
     do: ChessDuelBackend.Broadcasts.LichessClient.fetch_live_snapshot()
 
   defp fetch_games(client), do: client.fetch_live_games()
-
-  defp emit_changes(previous, current) do
-    Enum.each(current, fn {id, game} ->
-      if changed?(previous[id], game) do
-        ChessDuelBackendWeb.Endpoint.broadcast("broadcast_watch:#{id}", "broadcast_move", %{
-          game_id: id,
-          fen: game.fen,
-          last_move: game.last_move,
-          moves: game.moves,
-          live_clock: Map.get(game, :live_clock)
-        })
-      end
-    end)
-  end
-
-  defp changed?(nil, _game), do: false
-
-  defp changed?(old, new),
-    do:
-      {old.fen, old.moves, old.last_move, Map.get(old, :live_clock)} !=
-        {new.fen, new.moves, new.last_move, Map.get(new, :live_clock)}
-
-  defp emit_removals(previous, current) do
-    previous
-    |> Map.keys()
-    |> Enum.reject(&Map.has_key?(current, &1))
-    |> Enum.each(fn id ->
-      ChessDuelBackendWeb.Endpoint.broadcast(
-        "broadcast_watch:#{id}",
-        "broadcast_ended",
-        %{game_id: id}
-      )
-    end)
-  end
 end

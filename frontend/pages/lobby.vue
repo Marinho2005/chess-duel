@@ -339,15 +339,54 @@ function challengeByNickname(player: Friend) {
   void navigateTo({ path: '/play', query: { opponent: player.nickname } })
 }
 
-function startMatchmaking() {
+async function goToPlay() {
+  if (auth.token && !auth.isGuest) {
+    try {
+      const active = await $fetch<{ active: boolean; game_id?: string }>('/api/games/active', {
+        baseURL: config.public.api.baseURL,
+        headers: { Authorization: `Bearer ${auth.token}` }
+      })
+      if (active?.active && active.game_id) {
+        await navigateTo(`/game/${active.game_id}/live`)
+        return
+      }
+    } catch {
+      // ignore
+    }
+  }
+  await navigateTo('/play')
+}
+
+async function startMatchmaking() {
   if (!matchmakingChannel || searchingMatch.value) return
+
+  if (auth.token && !auth.isGuest) {
+    try {
+      const active = await $fetch<{ active: boolean; game_id?: string }>('/api/games/active', {
+        baseURL: config.public.api.baseURL,
+        headers: { Authorization: `Bearer ${auth.token}` }
+      })
+      if (active?.active && active.game_id) {
+        await navigateTo(`/game/${active.game_id}/live`)
+        return
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   errorMessage.value = ''
   matchmakingMessage.value = 'Procurando um oponente com rating próximo...'
 
   matchmakingChannel.push('join_queue', { time_control: selectedTimeControl.value })
     .receive('ok', () => { searchingMatch.value = true })
-    .receive('error', showChannelError)
+    .receive('error', (error: { reason?: string; game_id?: string }) => {
+      if (error?.reason === 'already_in_game' && error.game_id) {
+        void navigateTo(`/game/${error.game_id}/live`)
+      } else {
+        showChannelError(error)
+      }
+    })
 }
 
 function cancelMatchmaking() {
@@ -469,7 +508,7 @@ async function logOut() {
     <div class="content">
       <header class="welcome" id="dashboard"><h1>Como você quer jogar?</h1><p>Escolha seu modo de jogo e comece um novo duelo.</p></header>
       <section class="mode-grid" aria-label="Modos de jogo">
-        <NuxtLink class="mode-card featured" to="/play"><Swords :size="34" aria-hidden="true" /><span><strong>Buscar partida</strong><small>Encontre um adversário online e jogue agora.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
+        <NuxtLink class="mode-card featured" to="/play" @click.prevent="goToPlay"><Swords :size="34" aria-hidden="true" /><span><strong>Buscar partida</strong><small>Encontre um adversário online e jogue agora.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
         <NuxtLink class="mode-card" to="/bots"><Monitor :size="34" aria-hidden="true" /><span><strong>Jogar contra computador</strong><small>Desafie nossos bots em diversos níveis.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
         <NuxtLink class="mode-card" to="/puzzles"><Puzzle :size="34" aria-hidden="true" /><span><strong>Problemas</strong><small>Resolva problemas e melhore seu raciocínio tático.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
         <NuxtLink class="mode-card" to="/observar"><Eye :size="34" aria-hidden="true" /><span><strong>Observar</strong><small>Acompanhe partidas ao vivo.</small></span><ArrowRight :size="19" aria-hidden="true" /></NuxtLink>
@@ -576,7 +615,7 @@ async function logOut() {
 
       <section class="dashboard-grid" aria-label="Resumo da sua atividade">
         <article class="panel recent-panel">
-          <header class="widget-heading"><h2>Partidas recentes</h2><NuxtLink to="/profile/history">Ver tudo</NuxtLink></header>
+          <header class="widget-heading"><h2>Partidas recentes</h2><NuxtLink :to="auth.user ? `/user/${encodeURIComponent(auth.user.nickname)}?tab=games` : '/lobby'">Ver tudo</NuxtLink></header>
           <p v-if="historyLoading" class="widget-state">Carregando histórico…</p>
           <p v-else-if="!recentGames.length" class="widget-state">Suas partidas finalizadas aparecerão aqui.</p>
           <div v-else class="recent-list">

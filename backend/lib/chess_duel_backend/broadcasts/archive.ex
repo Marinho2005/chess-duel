@@ -1,6 +1,7 @@
 defmodule ChessDuelBackend.Broadcasts.Archive do
   @moduledoc "Cache limitado para rodadas consultadas sob demanda, sem bloquear o feed ao vivo."
   use GenServer
+  require Logger
   alias ChessDuelBackend.Broadcasts.LichessClient
 
   def start_link(opts),
@@ -20,7 +21,7 @@ defmodule ChessDuelBackend.Broadcasts.Archive do
          entries: %{},
          pending: %{},
          cooldown: System.monotonic_time(:millisecond),
-         fetch: Keyword.get(opts, :fetch, &fetch/1)
+         fetch: Keyword.get(opts, :fetch)
        }}
 
   @impl true
@@ -44,8 +45,9 @@ defmodule ChessDuelBackend.Broadcasts.Archive do
 
           true ->
             task =
-              Task.Supervisor.async_nolink(ChessDuelBackend.BroadcastAnalysisSupervisor, fn ->
-                state.fetch.(key)
+              Task.Supervisor.async_nolink(ChessDuelBackend.BroadcastFetchSupervisor, fn ->
+                # Do not retain a local function capture across Phoenix code reloads.
+                if state.fetch, do: state.fetch.(key), else: fetch(key)
               end)
 
             {:noreply, put_in(state.pending[task.ref], %{key: key, callers: [from]})}
@@ -66,11 +68,18 @@ defmodule ChessDuelBackend.Broadcasts.Archive do
     {item, pending} = Map.pop(state.pending, ref)
 
     if item do
+      if match?({:error, _}, result) do
+        Logger.warning("Broadcast lookup #{inspect(item.key)} failed: #{inspect(result)}")
+      end
+
       Enum.each(item.callers, &GenServer.reply(&1, result))
       now = System.monotonic_time(:millisecond)
 
       ttl =
         case {item.key, result} do
+          {{:tournament, _}, {:ok, _}} ->
+            300_000
+
           {{:round, _}, {:ok, [_ | _] = games}} ->
             if Enum.all?(games, &(&1.result != "*")), do: 3_600_000, else: 20_000
 

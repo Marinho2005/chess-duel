@@ -2,7 +2,6 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
   @moduledoc false
 
   alias ChessDuelBackend.Broadcasts.ReqHttpClient
-  alias ChessDuelBackend.Broadcasts.PgnParser
 
   @base_url "https://lichess.org"
 
@@ -101,17 +100,14 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
 
   defp valid_id?(id), do: is_binary(id) and Regex.match?(~r/^[a-zA-Z0-9]{8}$/, id)
 
+  # Previews need only the current position. PGN export/parsing must not block them.
   defp fetch_round(http, %{tour: tour, round: round}) do
-    json_path = "/api/broadcast/#{tour["slug"]}/#{round["slug"]}/#{round["id"]}"
-    pgn_path = "/api/broadcast/round/#{round["id"]}.pgn?clocks=true&comments=true"
+    path = "/api/broadcast/#{tour["slug"]}/#{round["slug"]}/#{round["id"]}"
 
-    with {:ok, json_body} <- get(http, json_path, "application/json"),
-         sampled_at_ms = System.system_time(:millisecond),
-         {:ok, round_data} <- Jason.decode(json_body),
-         true <- valid_round?(round_data),
-         {:ok, pgn} <- get(http, pgn_path, "application/x-chess-pgn"),
-         {:ok, parsed_games} <- PgnParser.parse(pgn) do
-      {:ok, normalize_round(round_data, parsed_games, tour, sampled_at_ms)}
+    with {:ok, body} <- get(http, path, "application/json"),
+         {:ok, data} <- Jason.decode(body),
+         true <- valid_round?(data) do
+      {:ok, normalize_round(data, tour)}
     else
       false -> {:error, :invalid_response}
       {:error, %Jason.DecodeError{}} -> {:error, :invalid_response}
@@ -119,37 +115,29 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
     end
   end
 
-  defp normalize_round(
-         %{"tour" => tour, "round" => round, "games" => games},
-         parsed_games,
-         source_tour,
-         sampled_at_ms
-       ) do
-    parsed_by_id =
-      Map.new(parsed_games, fn parsed ->
-        {parsed |> get_in(["headers", "GameURL"]) |> game_id_from_url(), parsed}
-      end)
-
-    games
-    |> Enum.flat_map(fn game ->
+  defp normalize_round(%{"tour" => tour, "round" => round, "games" => games}, source_tour) do
+    Enum.flat_map(games, fn game ->
       with id when is_binary(id) <- game["id"],
-           %{} = parsed <- parsed_by_id[id],
+           fen when is_binary(fen) and fen != "" <- game["fen"],
            [white, black | _] <- game["players"] do
-        moves = parsed["moves"] || []
-
         [
-          normalize_game(
-            id,
-            tour,
-            round,
-            game,
-            white,
-            black,
-            parsed,
-            moves,
-            source_tour,
-            sampled_at_ms
-          )
+          %{
+            game_id: id,
+            tournament_id: tour["id"] || source_tour["id"] || slugify(tour["name"]),
+            round_id: round["id"],
+            result: game["status"] || "*",
+            initial_fen: nil,
+            tournament: tour["name"],
+            tournament_image: source_tour["image"] || tour["image"],
+            round: round["name"],
+            white: player(white, %{}, "White"),
+            black: player(black, %{}, "Black"),
+            fen: fen,
+            last_move: last_move(game["lastMove"]),
+            moves: [],
+            lichess_url:
+              "#{round["url"] || "https://lichess.org/broadcast/-/-/#{round["id"]}"}/#{id}"
+          }
         ]
       else
         _ -> []
@@ -157,58 +145,18 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
     end)
   end
 
-  defp normalize_game(
-         id,
-         tour,
-         round,
-         game,
-         white,
-         black,
-         parsed,
-         moves,
-         source_tour,
-         sampled_at_ms
-       ) do
-    headers = parsed["headers"] || %{}
-    last_move = List.last(moves)
-
-    %{
-      game_id: id,
-      tournament_id:
-        tour["id"] || source_tour["id"] || source_tour["slug"] || slugify(tour["name"]),
-      round_id: round["id"],
-      result: game["status"] || headers["Result"] || "*",
-      initial_fen: headers["FEN"],
-      tournament: tour["name"],
-      tournament_image: source_tour["image"] || tour["image"],
-      round: round["name"],
-      white: player(white, headers, "White"),
-      black: player(black, headers, "Black"),
-      fen: parsed["fen"] || game["fen"],
-      last_move: last_move,
-      moves: moves,
-      live_clock: live_clock(game, white, black, parsed, sampled_at_ms),
-      lichess_url: headers["GameURL"] || "#{round["url"]}/#{id}"
-    }
-  end
-
-  # Lichess clocks are centiseconds; thinkTime is seconds since the last move.
-  # JSON and PGN are separate requests: never attach an old turn's clock to a newer board.
-  defp live_clock(game, white, black, parsed, sampled_at_ms) do
-    if game["fen"] == parsed["fen"] do
+  defp last_move(uci) when is_binary(uci) do
+    if Regex.match?(~r/^[a-h][1-8][a-h][1-8][qrbn]?$/, uci) do
       %{
-        white_ms: nonnegative_scaled(white["clock"], 10),
-        black_ms: nonnegative_scaled(black["clock"], 10),
-        think_time_ms: nonnegative_scaled(game["thinkTime"], 1_000),
-        sampled_at_ms: sampled_at_ms
+        from: String.slice(uci, 0, 2),
+        to: String.slice(uci, 2, 2),
+        promotion: if(String.length(uci) == 5, do: String.at(uci, 4), else: nil),
+        san: ""
       }
     end
   end
 
-  defp nonnegative_scaled(value, scale) when is_number(value) and value >= 0,
-    do: round(value * scale)
-
-  defp nonnegative_scaled(_, _), do: nil
+  defp last_move(_), do: nil
 
   defp slugify(value) when is_binary(value) do
     value
@@ -242,11 +190,6 @@ defmodule ChessDuelBackend.Broadcasts.LichessClient do
     do: true
 
   defp valid_round?(_), do: false
-
-  defp game_id_from_url(url) when is_binary(url),
-    do: url |> String.trim_trailing("/") |> String.split("/") |> List.last()
-
-  defp game_id_from_url(_), do: nil
 
   defp get(http, path, accept) do
     url = configured(:base_url, @base_url) <> path

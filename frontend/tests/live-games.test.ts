@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { LiveGame } from '../types/live-games'
 import { formatClock, groupBroadcastMoves, turnFromFen } from '../utils/liveGames'
@@ -38,31 +38,18 @@ describe('integração da UI ao vivo', () => {
     expect(board).toContain('lastMove: props.lastMove || undefined')
   })
 
-  it('usa somente navegação interna no card de broadcast do lobby', () => {
+  it('abre a partida específica no Lichess em uma nova aba', () => {
     const card = source('components/live/BroadcastLiveCard.vue')
-    expect(card).toContain('/watch/broadcast/')
-    expect(card).not.toContain('Ver no Lichess')
-    expect(card).not.toContain('target="_blank"')
+    expect(card).toContain(':href="game.lichess_url"')
+    expect(card).toContain('Ver no Lichess')
+    expect(card).toContain('target="_blank"')
+    expect(card).toContain('rel="noopener noreferrer"')
+    expect(card).toContain(':animation-duration="0"')
+    expect(card).not.toContain('/watch/broadcast/')
+    expect(existsSync(root + '/pages/watch/broadcast/[gameId].vue')).toBe(false)
   })
 
-  it('substitui o array realtime e limpa channel/listeners ao desmontar', () => {
-    const watch = source('pages/watch/broadcast/[gameId].vue')
-    expect(watch).toContain('moves: payload.moves')
-    expect(watch).toContain('sounds.play(soundForSan(move.san))')
-    expect(watch).toContain("event.key !== 'ArrowRight' && event.key !== 'ArrowLeft'")
-    expect(watch).toContain('window.removeEventListener')
-    expect(watch).toContain("channel?.off('broadcast_move')")
-    expect(watch).toContain("channel.on('broadcast_evaluation'")
-    expect(watch).toContain("channel.push('evaluate'")
-    expect(watch).toContain("import EvaluationBar from '~/components/review/EvaluationBar.vue'")
-    expect(watch).toContain('<EvaluationBar')
-    expect(watch).toContain('principal_variation')
-    expect(watch).toContain('Linha sugerida')
-    expect(watch).toContain('channel?.leave()')
-  })
-
-  it('mantém áudio apenas na tela completa, nunca nos cards do lobby', () => {
-    expect(source('pages/watch/broadcast/[gameId].vue')).toContain('useGameSounds()')
+  it('mantém previews sem áudio no lobby', () => {
     expect(source('pages/lobby.vue')).not.toContain('useGameSounds()')
     expect(source('components/live/BroadcastLiveCard.vue')).not.toContain('useGameSounds()')
   })
@@ -90,9 +77,10 @@ describe('integração da UI ao vivo', () => {
     expect(watch).toContain('/api/broadcasts/tournaments')
     expect(watch).toContain('category: category.value')
     expect(watch).toContain('blitz_increment')
-    expect(tournament).toContain('/api/broadcasts/tournaments/${encodeURIComponent(tournamentId.value)}/games')
+    expect(tournament).toContain('/api/broadcasts/rounds/${encodeURIComponent(selectedRound.value)}/games')
     expect(watch).toContain('tournament.image_url')
-    expect(tournament).toContain('tournament_image')
+    expect(tournament).toContain('tournament.value?.image_url')
+    expect(tournament).toContain('<LiveBroadcastLiveCard')
     const presenceAvatar = source('components/profile/PresenceAvatar.vue')
     expect(presenceAvatar).toContain('bottom: 0')
     expect(presenceAvatar).toContain('box-sizing: border-box')

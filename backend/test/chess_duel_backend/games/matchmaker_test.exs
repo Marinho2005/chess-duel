@@ -71,6 +71,19 @@ defmodule ChessDuelBackend.Games.MatchmakerTest do
     assert {:ok, [_]} = Matchmaker.queue_entries("rapid_10_0")
   end
 
+  test "rejeita entrar na fila se o usuario ja estiver em uma partida ativa" do
+    player1 = register_user("queue-active1@example.com", "queue_active1")
+    player2 = register_user("queue-active2@example.com", "queue_active2")
+    game_id = "queue-active-#{System.unique_integer([:positive])}"
+
+    assert {:ok, _} = GameServer.reserve_players(game_id, player1.id, player2.id)
+
+    assert {:error, {:already_in_game, ^game_id}} = Matchmaker.join_queue(player1, "blitz_3_0")
+    assert {:error, {:already_in_game, ^game_id}} = Matchmaker.join_queue(player2, "blitz_3_0")
+
+    stop_game(game_id)
+  end
+
   defp register_user(email, nickname) do
     {:ok, user} =
       Accounts.register_user(%{email: email, nickname: nickname, password: "password1234"})

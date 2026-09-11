@@ -63,6 +63,61 @@ defmodule ChessDuelBackendWeb.LiveGameControllerTest do
     Enum.each([bullet_id, blitz_id], &cleanup/1)
   end
 
+  test "GET /api/games/active returns active game or false", %{conn: conn} do
+    player1 = user("active-p1")
+    player2 = user("active-p2")
+    token1 = Accounts.generate_user_api_token(player1)
+    token2 = Accounts.generate_user_api_token(player2)
+
+    # Initially no active games
+    res1 =
+      conn
+      |> put_req_header("authorization", "Bearer #{token1}")
+      |> get("/api/games/active")
+      |> json_response(200)
+
+    assert res1 == %{"active" => false}
+
+    # Start a game with player1 as white and player2 as black
+    game_id = "active-test-#{System.unique_integer([:positive])}"
+    assert {:ok, _} = GameServer.reserve_players(game_id, player1.id, player2.id)
+    wait_until_started(game_id)
+
+    # Both players see the active game
+    res_p1 =
+      conn
+      |> recycle()
+      |> put_req_header("authorization", "Bearer #{token1}")
+      |> get("/api/games/active")
+      |> json_response(200)
+
+    assert res_p1 == %{"active" => true, "game_id" => game_id}
+
+    res_p2 =
+      conn
+      |> recycle()
+      |> put_req_header("authorization", "Bearer #{token2}")
+      |> get("/api/games/active")
+      |> json_response(200)
+
+    assert res_p2 == %{"active" => true, "game_id" => game_id}
+
+    # Once the game finishes, neither sees it as active
+    assert {:ok, _} = GameServer.resign(game_id, player1.id)
+    Process.sleep(100)
+
+    res_after =
+      conn
+      |> recycle()
+      |> put_req_header("authorization", "Bearer #{token1}")
+      |> get("/api/games/active")
+      |> json_response(200)
+
+    assert res_after == %{"active" => false}
+
+    cleanup(game_id)
+  end
+
   defp user(prefix) do
     suffix = System.unique_integer([:positive])
 

@@ -3,7 +3,7 @@ defmodule ChessDuelBackend.Broadcasts.CacheTest do
 
   alias ChessDuelBackend.Broadcasts.Cache
 
-  test "keeps the last valid snapshot, emits only real moves, and removes finished games" do
+  test "keeps the last valid snapshot, updates previews, and removes finished games" do
     game = game("start", [])
     moved = game("after", [%{san: "e4", from: "e2", to: "e4", promotion: nil}])
 
@@ -15,37 +15,17 @@ defmodule ChessDuelBackend.Broadcasts.CacheTest do
     client = fn -> Agent.get_and_update(responses, fn [next | rest] -> {next, rest} end) end
     {:ok, cache} = start_supervised({Cache, name: nil, client: client, auto_refresh: false})
 
-    Phoenix.PubSub.subscribe(ChessDuelBackend.PubSub, "broadcast_watch:game-1")
     assert :ok = Cache.refresh(cache)
     assert [^game] = Cache.list_games(cache)
-    refute_receive %{event: "broadcast_move"}
 
     assert {:error, :timeout} = Cache.refresh(cache)
     assert [^game] = Cache.list_games(cache)
     assert :ok = Cache.refresh(cache)
-    refute_receive %{event: "broadcast_move"}
 
     assert :ok = Cache.refresh(cache)
-    assert_receive %{event: "broadcast_move", payload: %{fen: "after", moves: [_]}}
+    assert [^moved] = Cache.list_games(cache)
     assert :ok = Cache.refresh(cache)
-    assert_receive %{event: "broadcast_ended", payload: %{game_id: "game-1"}}
     assert [] = Cache.list_games(cache)
-  end
-
-  test "broadcasts clock synchronization even without a new move" do
-    first = Map.put(game("same", []), :live_clock, %{think_time_ms: 10_000, sampled_at_ms: 100_000})
-    second = %{first | live_clock: %{think_time_ms: 30_000, sampled_at_ms: 120_000}}
-    {:ok, responses} = Agent.start_link(fn -> [{:ok, [first]}, {:ok, [second]}] end)
-    client = fn -> Agent.get_and_update(responses, fn [next | rest] -> {next, rest} end) end
-    cache = start_supervised!({Cache, name: nil, client: client, auto_refresh: false})
-    Phoenix.PubSub.subscribe(ChessDuelBackend.PubSub, "broadcast_watch:game-1")
-    assert :ok = Cache.refresh(cache)
-    assert :ok = Cache.refresh(cache)
-
-    assert_receive %{
-      event: "broadcast_move",
-      payload: %{fen: "same", live_clock: %{think_time_ms: 30_000}}
-    }
   end
 
   test "groups live games by tournament without mixing them" do

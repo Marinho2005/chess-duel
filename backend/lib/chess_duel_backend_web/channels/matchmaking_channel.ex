@@ -20,8 +20,14 @@ defmodule ChessDuelBackendWeb.MatchmakingChannel do
   @impl true
   def handle_in("join_queue", %{"time_control" => time_control_id}, socket) do
     case Matchmaker.join_queue(socket.assigns.current_user, time_control_id) do
-      {:ok, queue} -> {:reply, {:ok, queue}, socket}
-      {:error, reason} -> {:reply, {:error, %{reason: format_reason(reason)}}, socket}
+      {:ok, queue} ->
+        {:reply, {:ok, queue}, socket}
+
+      {:error, {:already_in_game, game_id}} ->
+        {:reply, {:error, %{reason: "already_in_game", game_id: game_id}}, socket}
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: format_reason(reason)}}, socket}
     end
   end
 

@@ -478,6 +478,16 @@ async function leaveGame() {
   }
 }
 
+async function exitToPlay() {
+  channel?.leave()
+  if (auth.isGuest) {
+    await auth.logOut()
+    await navigateTo('/')
+  } else {
+    await navigateTo('/play')
+  }
+}
+
 function moveError(reason?: string) {
   const messages: Record<string, string> = {
     illegal_move: 'Lance ilegal. O tabuleiro foi restaurado.',
@@ -571,6 +581,8 @@ function gameOverReason(reason: GameOver['reason']) {
                 <span v-else-if="rematchState === 'waiting'" class="rematch-dialogue">Pedido de revanche enviado. Aguardando resposta…</span>
                 <span v-else-if="rematchState === 'starting'" class="rematch-dialogue">Preparando a revanche…</span>
                 <span v-else-if="rematchState === 'declined'" class="rematch-dialogue">Revanche recusada.</span>
+
+                <button v-if="rematchState !== 'starting'" type="button" @click="exitToPlay">Sair</button>
               </div>
             </div>
           </div>

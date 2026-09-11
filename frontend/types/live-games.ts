@@ -5,14 +5,7 @@ export type BroadcastPlayer = {
   rating: number | null
   country_code?: string | null
 }
-export type BroadcastClockSnapshot = {
-  white_ms: number | null
-  black_ms: number | null
-  think_time_ms: number | null
-  sampled_at_ms: number
-}
 export type BroadcastLiveGame = {
-  live_clock?: BroadcastClockSnapshot | null
   game_id: string
   tournament_id: string
   tournament: string

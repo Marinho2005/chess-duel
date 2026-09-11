@@ -22,7 +22,7 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
     :ok
   end
 
-  test "normalizes official round JSON and PGN into the stable contract" do
+  test "normalizes previews from JSON without requesting PGN" do
     assert {:ok, [game]} = LichessClient.fetch_live_games(http_client: FakeHTTP)
     assert game.game_id == "AbCd1234"
     assert game.tournament_id == "example-open"
@@ -31,36 +31,34 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
     assert game.round == "Round 3"
     assert game.white == %{name: "White Player", title: "GM", rating: 2640, country_code: "BRA"}
     assert game.black == %{name: "Black Player", title: "IM", rating: 2512, country_code: "USA"}
-    assert Enum.map(game.moves, & &1["san"]) == ["e4", "e5", "Nf3"]
-    assert game.last_move["from"] == "g1"
-    assert game.lichess_url =~ "/AbCd1234"
-  end
+    assert game.fen == hd(round_json()["games"])["fen"]
+    assert game.moves == []
+    assert game.last_move == %{from: "g1", to: "f3", promotion: nil, san: ""}
 
-  test "keeps Lichess thinking time and converts clock centiseconds to milliseconds" do
-    data = round_json()
-    data = put_in(data, ["games", Access.at(0), "thinkTime"], 1312)
-    data = put_in(data, ["games", Access.at(0), "players", Access.at(0), "clock"], 398_800)
-    data = put_in(data, ["games", Access.at(0), "players", Access.at(1), "clock"], 381_200)
-    Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(data)}})
-    before = System.system_time(:millisecond)
-    assert {:ok, [game]} = LichessClient.fetch_live_games(http_client: FakeHTTP)
-    assert game.live_clock.white_ms == 3_988_000
-    assert game.live_clock.black_ms == 3_812_000
-    assert game.live_clock.think_time_ms == 1_312_000
-    assert game.live_clock.sampled_at_ms >= before
-    assert game.live_clock.sampled_at_ms <= System.system_time(:millisecond)
-  end
+    assert game.lichess_url ==
+             "https://lichess.org/broadcast/example-open/round-3/round123/AbCd1234"
 
-  test "does not apply JSON clocks to a different PGN position" do
-    data = put_in(round_json(), ["games", Access.at(0), "fen"], "older-position")
-    Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(data)}})
-    assert {:ok, [game]} = LichessClient.fetch_live_games(http_client: FakeHTTP)
-    assert game.live_clock == nil
+    refute Enum.any?(Process.get(:requested_urls), &String.contains?(&1, ".pgn"))
   end
 
   test "returns an empty list when no official broadcast is live" do
     Process.put(:official_response, {:ok, %{status: 200, body: Jason.encode!(%{active: []})}})
     assert {:ok, []} = LichessClient.fetch_live_games(http_client: FakeHTTP)
+  end
+
+  test "round previews survive unavailable PGN and support missing or promotion last moves" do
+    Process.put(:pgn_response, {:error, :timeout})
+    round = put_in(round_json(), ["games", Access.at(0), "lastMove"], "a7a8q")
+    Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(round)}})
+    assert {:ok, [game]} = LichessClient.fetch_round_games("round123", http_client: FakeHTTP)
+    assert game.last_move == %{from: "a7", to: "a8", promotion: "q", san: ""}
+    assert length(Process.get(:requested_urls)) == 1
+
+    round = put_in(round, ["games", Access.at(0), "lastMove"], nil)
+    Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(round)}})
+
+    assert {:ok, [%{last_move: nil}]} =
+             LichessClient.fetch_round_games("round123", http_client: FakeHTTP)
   end
 
   test "maps HTTP errors, timeout and invalid responses without external calls" do
@@ -131,7 +129,7 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
     round = put_in(round_json(), ["games", Access.at(0), "status"], "1-0")
     Process.put(:round_response, {:ok, %{status: 200, body: Jason.encode!(round)}})
 
-    assert {:ok, [%{result: "1-0", round_id: "round123", moves: [_, _, _]}]} =
+    assert {:ok, [%{result: "1-0", round_id: "round123", moves: []}]} =
              LichessClient.fetch_round_games("round123", http_client: FakeHTTP)
 
     assert {:ok, []} = LichessClient.fetch_live_games(http_client: FakeHTTP)
@@ -153,6 +151,7 @@ defmodule ChessDuelBackend.Broadcasts.LichessClientTest do
       "games" => [
         %{
           "id" => "AbCd1234",
+          "lastMove" => "g1f3",
           "status" => "*",
           "fen" => "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
           "players" => [

@@ -11,6 +11,8 @@ const route = useRoute()
 const gameId = computed(() => String(route.params.gameId))
 const { review, loading, error, currentPly, replay, position, evaluation, start, stop, select } = useGameReview(gameId)
 const sounds = useGameSounds()
+const auth = useAuthStore()
+const backUrl = computed(() => auth.user?.nickname ? `/user/${encodeURIComponent(auth.user.nickname)}?tab=games` : '/lobby')
 
 const statusLabel = computed(() => review.value?.status === 'processing'
   ? 'Stockfish está calculando as posições…'
@@ -45,7 +47,7 @@ function handleReviewKeydown(event: KeyboardEvent) {
   <main class="review-shell" @pointerdown.once="sounds.unlock">
     <header class="page-header">
       <div>
-        <NuxtLink to="/profile/history">← Histórico</NuxtLink>
+        <NuxtLink :to="backUrl">← Voltar ao perfil</NuxtLink>
         <span>ANÁLISE PÓS-PARTIDA</span>
         <h1>Revisão da partida</h1>
       </div>
@@ -90,6 +92,7 @@ function handleReviewKeydown(event: KeyboardEvent) {
         :evaluation="evaluation"
         :depth="review.results.depth"
         :moves="replay.moves"
+        :positions="replay.positions"
         :current-ply="currentPly"
         :white-player="review.game.white_player"
         :black-player="review.game.black_player"

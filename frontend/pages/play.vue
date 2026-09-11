@@ -2,7 +2,7 @@
 import { Socket, type Channel } from 'phoenix'
 import { Check, Copy, Link2, Search, ShieldCheck, Swords, UserRoundPlus, Users } from 'lucide-vue-next'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'active-game'], layout: 'default' })
 
 type TimeControlId = 'bullet_1_0' | 'blitz_3_0' | 'blitz_5_0' | 'rapid_10_0'
 type TimeControl = { id: TimeControlId; label: string; detail: string; category: string; icon: 'bullet' | 'blitz' | 'rapid' }
@@ -59,8 +59,21 @@ const privateRoomLink = computed(() => privateRoom.value && import.meta.client
   ? `${window.location.origin}/room/${privateRoom.value.code}`
   : '')
 
-onMounted(() => {
+onMounted(async () => {
   if (!auth.token || !auth.user) return
+
+  try {
+    const activeData = await $fetch<{ active: boolean; game_id?: string }>('/api/games/active', {
+      baseURL: config.public.api.baseURL,
+      headers: { Authorization: `Bearer ${auth.token}` }
+    })
+    if (activeData?.active && activeData.game_id) {
+      await navigateTo(`/game/${activeData.game_id}/live`)
+      return
+    }
+  } catch {
+    // proceed
+  }
 
   void loadRouteOpponent()
 
@@ -124,7 +137,13 @@ function startMatchmaking() {
   searchMessage.value = `Procurando um adversário para ${selectedControl.value.category} ${selectedControl.value.detail}…`
   matchmakingChannel.push('join_queue', { time_control: selectedTimeControl.value })
     .receive('ok', () => { searching.value = true })
-    .receive('error', (error: { reason?: string }) => showError(error.reason || 'queue_unavailable'))
+    .receive('error', (error: { reason?: string; game_id?: string }) => {
+      if (error?.reason === 'already_in_game' && error.game_id) {
+        void navigateTo(`/game/${error.game_id}/live`)
+      } else {
+        showError(error?.reason || 'queue_unavailable')
+      }
+    })
 }
 
 function cancelMatchmaking() {
