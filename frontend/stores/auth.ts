@@ -3,6 +3,9 @@ import { defineStore } from 'pinia'
 export type AuthUser = {
   id: string
   email: string
+  role: 'user' | 'admin'
+  account_status: 'active' | 'suspended' | 'banned'
+  suspended_until: string | null
   nickname: string
   country: string | null
   country_code: string | null
@@ -10,6 +13,7 @@ export type AuthUser = {
   rating: number
   ratings: PlayerRatings
   inserted_at: string
+  birth_date: string | null
 }
 
 export type PlayerRatings = { bullet: number; blitz: number; rapid: number }
@@ -82,14 +86,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(email: string, password: string, nickname: string) {
+  async function register(email: string, password: string, nickname: string, birthDate: string) {
     error.value = ''
 
     try {
       const response = await $fetch<RegistrationResponse>('/api/users/register', {
         baseURL: config.public.api.baseURL,
         method: 'POST',
-        body: { user: { email, password, nickname } }
+        body: { user: { email, password, nickname, birth_date: birthDate || null } }
       })
 
       return response.status === 'pending_confirmation'
@@ -175,8 +179,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       user.value = response.user
       return true
-    } catch {
+    } catch (requestError) {
       clearSession()
+      error.value = formatRequestError(requestError)
       return false
     }
   }
@@ -200,7 +205,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function updateProfile(nickname: string, countryCode: string, country: string) {
+  async function updateProfile(nickname: string, countryCode: string, country: string, birthDate?: string) {
     error.value = ''
 
     if (!token.value) {
@@ -212,7 +217,7 @@ export const useAuthStore = defineStore('auth', () => {
         baseURL: config.public.api.baseURL,
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token.value}` },
-        body: { user: { nickname, country_code: countryCode || null, country: country || null } }
+        body: { user: { nickname, country_code: countryCode || null, country: country || null, birth_date: birthDate || null } }
       })
 
       user.value = response.user
@@ -259,6 +264,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function handleAccountBlock(code: string, message?: string) {
+    if (!['account_banned', 'account_suspended'].includes(code)) return
+    clearSession()
+    error.value = message || (code === 'account_banned' ? 'Sua conta foi banida.' : 'Sua conta está suspensa temporariamente.')
+  }
+
   function clearSession() {
     token.value = null
     user.value = null
@@ -279,6 +290,9 @@ export const useAuthStore = defineStore('auth', () => {
           .join(', ')
       }
 
+      if (data?.error === 'account_banned') return 'Sua conta foi banida.'
+      if (data?.error === 'account_suspended') return 'Sua conta está suspensa temporariamente.'
+
       if (data?.error === 'invalid_email_or_password') {
         return 'Email ou senha invalidos.'
       }
@@ -291,5 +305,5 @@ export const useAuthStore = defineStore('auth', () => {
     return 'Nao foi possivel concluir a solicitacao.'
   }
 
-  return { token, user, guest, presence, isGuest, identityId, error, restoreSession, restorePresence, setPresence, register, logIn, startGuestSession, completeOAuth, fetchCurrentUser, updateProfile, updateAvatar, logOut }
+  return { token, user, guest, handleAccountBlock, presence, isGuest, identityId, error, restoreSession, restorePresence, setPresence, register, logIn, startGuestSession, completeOAuth, fetchCurrentUser, updateProfile, updateAvatar, logOut }
 })

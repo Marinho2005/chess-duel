@@ -1,16 +1,26 @@
-export type LiveMove = { san: string; from: string; to: string; promotion: string | null }
+export type LiveMove = { clock_ms?: number | null; san: string; from: string; to: string; promotion: string | null }
 export type BroadcastPlayer = {
   name: string
   title: string | null
   rating: number | null
   country_code?: string | null
 }
+export type BroadcastClockSnapshot = {
+  white_ms: number | null
+  black_ms: number | null
+  think_time_ms: number | null
+  sampled_at_ms: number
+}
 export type BroadcastLiveGame = {
+  live_clock?: BroadcastClockSnapshot | null
   game_id: string
   tournament_id: string
   tournament: string
   tournament_image?: string | null
   round: string
+  round_id?: string
+  result?: string
+  initial_fen?: string | null
   white: BroadcastPlayer
   black: BroadcastPlayer
   fen: string
@@ -47,8 +57,11 @@ export type LiveGame =
 export type BroadcastGame = BroadcastLiveGame
 export type BroadcastsApiResponse = { games: BroadcastGame[] }
 export type ChessDuelLiveApiResponse = { games: ChessDuelLiveGame[] }
-export type BroadcastTournament = { tournament_id: string; name: string; image_url: string | null; live_games: number }
+export type BroadcastTournament = { tournament_id: string; name: string; image_url: string | null; live_games: number | null }
 export type BroadcastTournamentsApiResponse = { tournaments: BroadcastTournament[] }
 export type LiveFeedItem =
   | { id: string; source: 'broadcast'; game: BroadcastGame }
   | { id: string; source: 'chessduel'; game: ChessDuelLiveGame }
+
+export type BroadcastRound = { id: string; name: string; ongoing: boolean; finished: boolean; starts_at: number | null }
+export type BroadcastTournamentDetail = { tournament_id: string; name: string; image_url: string | null; rounds: BroadcastRound[] }

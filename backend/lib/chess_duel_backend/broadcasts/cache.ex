@@ -30,6 +30,8 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
 
     state = %{
       games: %{},
+      tournaments: nil,
+      refresh_task: nil,
       client:
         Keyword.get(
           opts,
@@ -66,6 +68,16 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
       end)
       |> Enum.sort_by(&String.downcase(&1.name))
 
+    tournaments =
+      if state.tournaments do
+        Enum.map(state.tournaments, fn tournament ->
+          count = Enum.find(tournaments, &(&1.tournament_id == tournament.tournament_id))
+          Map.put(tournament, :live_games, if(count, do: count.live_games, else: nil))
+        end)
+      else
+        tournaments
+      end
+
     {:reply, tournaments, state}
   end
 
@@ -87,14 +99,49 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
   end
 
   @impl true
-  def handle_info(:refresh, state) do
-    {_reply, next_state, delay} = update(state)
+  def handle_info(:refresh, %{refresh_task: nil} = state) do
+    task =
+      Task.Supervisor.async_nolink(
+        ChessDuelBackend.BroadcastAnalysisSupervisor,
+        fn -> fetch_games(state.client) end
+      )
+
+    {:noreply, %{state | refresh_task: task.ref}}
+  end
+
+  def handle_info(:refresh, state), do: {:noreply, state}
+
+  def handle_info({ref, result}, %{refresh_task: ref} = state) do
+    Process.demonitor(ref, [:flush])
+    {_reply, next_state, delay} = apply_result(result, %{state | refresh_task: nil})
     Process.send_after(self(), :refresh, delay)
     {:noreply, next_state}
   end
 
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{refresh_task: ref} = state) do
+    Logger.warning("Broadcast refresh task failed: #{inspect(reason)}")
+    Process.send_after(self(), :refresh, state.interval)
+    {:noreply, %{state | refresh_task: nil}}
+  end
+
   defp update(state) do
-    case fetch_games(state.client) do
+    apply_result(fetch_games(state.client), state)
+  end
+
+  defp apply_result({:ok, %{games: games} = snapshot}, state) do
+    retained =
+      state.games
+      |> Map.values()
+      |> Enum.filter(&(Map.get(&1, :round_id) in snapshot.failed_rounds))
+
+    {reply, next, delay} =
+      apply_result({:ok, games ++ retained}, %{state | tournaments: snapshot.tournaments})
+
+    {reply, next, if(snapshot.rate_limited, do: max(delay, @rate_limit_interval), else: delay)}
+  end
+
+  defp apply_result(result, state) do
+    case result do
       {:ok, games} ->
         next =
           games
@@ -121,6 +168,10 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
   end
 
   defp fetch_games(client) when is_function(client, 0), do: client.()
+
+  defp fetch_games(ChessDuelBackend.Broadcasts.LichessClient),
+    do: ChessDuelBackend.Broadcasts.LichessClient.fetch_live_snapshot()
+
   defp fetch_games(client), do: client.fetch_live_games()
 
   defp emit_changes(previous, current) do
@@ -130,7 +181,8 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
           game_id: id,
           fen: game.fen,
           last_move: game.last_move,
-          moves: game.moves
+          moves: game.moves,
+          live_clock: Map.get(game, :live_clock)
         })
       end
     end)
@@ -139,7 +191,9 @@ defmodule ChessDuelBackend.Broadcasts.Cache do
   defp changed?(nil, _game), do: false
 
   defp changed?(old, new),
-    do: {old.fen, length(old.moves), old.last_move} != {new.fen, length(new.moves), new.last_move}
+    do:
+      {old.fen, old.moves, old.last_move, Map.get(old, :live_clock)} !=
+        {new.fen, new.moves, new.last_move, Map.get(new, :live_clock)}
 
   defp emit_removals(previous, current) do
     previous

@@ -25,8 +25,14 @@ defmodule ChessDuelBackendWeb.UserSessionController do
         })
 
       user ->
-        token = Accounts.generate_user_api_token(user)
-        json(conn, %{token: token, user: UserJSON.data(user)})
+        case ChessDuelBackend.Accounts.AccountAccess.check(user) do
+          :ok ->
+            token = Accounts.generate_user_api_token(user)
+            json(conn, %{token: token, user: UserJSON.data(user)})
+
+          {:error, error} ->
+            conn |> put_status(:forbidden) |> json(error)
+        end
     end
   end
 

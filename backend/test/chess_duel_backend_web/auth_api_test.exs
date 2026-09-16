@@ -11,7 +11,8 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
         "user" => %{
           "email" => "api@example.com",
           "nickname" => "api_player",
-          "password" => "password1234"
+          "password" => "password1234",
+          "birth_date" => "2001-06-15"
         }
       })
 
@@ -29,6 +30,7 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
              |> json_response(403)
 
     user = Accounts.get_user_by_email("api@example.com")
+    assert user.birth_date == ~D[2001-06-15]
     confirm_user!(user)
 
     %{"token" => token, "user" => logged_user} =
@@ -44,6 +46,7 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
              json_response(get(authenticated_conn, "/api/users/me"), 200)
 
     assert user_id == logged_user["id"]
+    assert logged_user["birth_date"] == "2001-06-15"
 
     assert response(delete(authenticated_conn, "/api/users/log_out"), 204)
 
@@ -78,6 +81,22 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
     assert is_binary(token)
   end
 
+  test "cadastro rejeita data de nascimento futura com mensagem clara", %{conn: conn} do
+    future = Date.utc_today() |> Date.add(1) |> Date.to_iso8601()
+
+    assert %{"errors" => %{"birth_date" => ["não pode ser uma data futura"]}} =
+             conn
+             |> post("/api/users/register", %{
+               "user" => %{
+                 "email" => "future@example.com",
+                 "nickname" => "future_player",
+                 "password" => "password1234",
+                 "birth_date" => future
+               }
+             })
+             |> json_response(422)
+  end
+
   test "me exige autenticacao", %{conn: conn} do
     assert %{"error" => "authentication_required"} = json_response(get(conn, "/api/users/me"), 401)
   end
@@ -101,6 +120,7 @@ defmodule ChessDuelBackendWeb.AuthApiTest do
     assert profile["status"] == "offline"
     assert profile["inserted_at"]
     refute Map.has_key?(profile, "email")
+    refute Map.has_key?(profile, "birth_date")
 
     assert %{"error" => "authentication_required"} =
              build_conn()

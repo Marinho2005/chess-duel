@@ -6,18 +6,45 @@ defmodule ChessDuelBackend.AccountsTest do
   alias ChessDuelBackend.Repo
 
   test "register_user/1 cria usuario com nickname unico, senha segura e rating inicial" do
-    attrs = %{email: "player@example.com", nickname: "player_one", password: "password1234"}
+    attrs = %{
+      email: "player@example.com",
+      nickname: "player_one",
+      password: "password1234",
+      birth_date: ~D[2000-05-20]
+    }
 
     assert {:ok, user} = Accounts.register_user(attrs)
     assert user.nickname == "player_one"
     assert user.rating == 1200
     assert user.hashed_password
+    assert user.birth_date == ~D[2000-05-20]
     refute user.password
 
     assert {:error, changeset} =
              Accounts.register_user(%{attrs | email: "other@example.com"})
 
     assert "has already been taken" in errors_on(changeset).nickname
+  end
+
+  test "register_user/1 rejeita data de nascimento futura e aceita data ausente" do
+    assert {:error, changeset} =
+             Accounts.register_user(%{
+               email: "future-birth@example.com",
+               nickname: "future_birth",
+               password: "password1234",
+               birth_date: Date.add(Date.utc_today(), 1)
+             })
+
+    assert "não pode ser uma data futura" in errors_on(changeset).birth_date
+
+    assert {:ok, user} =
+             Accounts.register_user(%{
+               email: "no-birth@example.com",
+               nickname: "no_birth",
+               password: "password1234"
+             })
+
+    assert is_nil(user.birth_date)
   end
 
   test "update_user_profile/2 altera somente dados publicos e preserva o rating" do

@@ -3,12 +3,16 @@ defmodule ChessDuelBackendWeb.UserJSON do
     %{
       id: user.id,
       email: user.email,
+      role: user.role,
+      account_status: ChessDuelBackend.Accounts.AccountAccess.status(user),
+      suspended_until: user.suspended_until,
       nickname: user.nickname,
       country: user.country,
       country_code: user.country_code,
       avatar_url: user.avatar_path,
       rating: user.blitz_rating,
       ratings: ChessDuelBackend.Accounts.User.ratings(user),
+      birth_date: user.birth_date,
       inserted_at: user.inserted_at
     }
   end

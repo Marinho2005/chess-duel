@@ -10,6 +10,32 @@ defmodule ChessDuelBackendWeb.Router do
     plug ChessDuelBackendWeb.UserAuth, :require_authenticated_user
   end
 
+  pipeline :optional_authenticated_api do
+    plug ChessDuelBackendWeb.UserAuth, :fetch_current_user
+  end
+
+  pipeline :admin_api do
+    plug ChessDuelBackendWeb.UserAuth, :require_admin
+  end
+
+  scope "/api", ChessDuelBackendWeb do
+    pipe_through [:api, :optional_authenticated_api]
+    get "/games/:id/analysis", GameAnalysisController, :show
+  end
+
+  scope "/api/admin", ChessDuelBackendWeb do
+    pipe_through [:api, :authenticated_api, :admin_api]
+    get "/dashboard", AdminController, :dashboard
+    get "/users", AdminController, :users
+    get "/users/:id", AdminController, :user
+    post "/users/:id/suspend", AdminController, :suspend
+    post "/users/:id/ban", AdminController, :ban
+    post "/users/:id/reactivate", AdminController, :reactivate
+    get "/games", AdminController, :games
+    get "/games/:id", AdminController, :game
+    get "/system", AdminController, :system
+  end
+
   pipeline :oauth do
     plug :fetch_session
   end
@@ -29,11 +55,12 @@ defmodule ChessDuelBackendWeb.Router do
     post "/users/register", UserRegistrationController, :create
     post "/users/confirm/:token", UserConfirmationController, :create
     post "/users/log_in", UserSessionController, :create
-    get "/profiles/:nickname", UserController, :show
     get "/ranking", UserController, :ranking
     get "/games/live", LiveGameController, :index
     get "/broadcasts/live", BroadcastController, :index
     get "/broadcasts/tournaments", BroadcastController, :tournaments
+    get "/broadcasts/tournaments/:tournament_id", BroadcastController, :tournament
+    get "/broadcasts/rounds/:round_id/games", BroadcastController, :round_games
     get "/broadcasts/tournaments/:tournament_id/games", BroadcastController, :tournament_games
   end
 
@@ -42,11 +69,25 @@ defmodule ChessDuelBackendWeb.Router do
 
     delete "/users/log_out", UserSessionController, :delete
     get "/users/me", UserController, :me
+    get "/users/search", FriendshipController, :search
+    get "/friendships", FriendshipController, :index
+    post "/friendships", FriendshipController, :create
+    patch "/friendships/:id/accept", FriendshipController, :accept
+    patch "/friendships/:id/decline", FriendshipController, :decline
+    delete "/friendships/:id", FriendshipController, :delete
+    get "/clubs", ClubController, :index
+    post "/clubs", ClubController, :create
+    get "/clubs/:id", ClubController, :show
+    patch "/clubs/:id", ClubController, :update
+    post "/clubs/:id/join", ClubController, :join
+    patch "/clubs/:id/memberships/:membership_id/approve", ClubController, :approve
+    patch "/clubs/:id/memberships/:membership_id/decline", ClubController, :decline
+    patch "/clubs/:id/memberships/:membership_id/promote", ClubController, :promote
+    delete "/clubs/:id/memberships/:membership_id", ClubController, :delete_membership
     get "/users/me/games", GameHistoryController, :index
     get "/bots", BotGameController, :index
     post "/bot-games", BotGameController, :create
     post "/games/:id/analyze", GameAnalysisController, :create
-    get "/games/:id/analysis", GameAnalysisController, :show
     get "/puzzles/next", PuzzleController, :next
     get "/puzzles/summary", PuzzleController, :summary
     post "/puzzles/:id/attempt", PuzzleController, :attempt
@@ -58,8 +99,9 @@ defmodule ChessDuelBackendWeb.Router do
   end
 
   scope "/api", ChessDuelBackendWeb do
-    pipe_through :api
+    pipe_through [:api, :optional_authenticated_api]
 
+    get "/profiles/:nickname", UserController, :show
     get "/users/:nickname", UserController, :show
   end
 end

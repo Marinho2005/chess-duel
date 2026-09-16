@@ -1,8 +1,8 @@
 # ChessDuel ♟️
 
-**ChessDuel** é um SaaS de xadrez em tempo real — um projeto pessoal em desenvolvimento, inspirado em chess.com e lichess. A ideia é construir, do zero e com calma, um jogo online onde você desafia outros jogadores, joga em tempo real e acompanha o ranking. Comecei com o esqueleto: banco + cache no Docker, um backend Phoenix (API only) e um frontend Nuxt como SPA que já conversam entre si.
+**ChessDuel** é um SaaS de xadrez em tempo real, inspirado em chess.com e lichess — construído do zero como projeto pessoal. Partidas ao vivo via WebSocket, matchmaking por rating, puzzles táticos, análise pós-jogo com Stockfish, bots, sistema social e ranking completo.
 
-> **Status: fase inicial / aprendizado.** A lógica de xadrez ainda não existe — o foco atual é o ambiente rodando e a comunicação frontend ↔ backend funcionando.
+> **Status: em desenvolvimento ativo.** Fases 1–4 implementadas. Próximas etapas: monetização (Stripe), torneios e escala multi-região.
 
 ## Badges
 
@@ -11,6 +11,13 @@
 ![Vue](https://img.shields.io/badge/Vue%2FNuxt-00C58E?style=for-the-badge&logo=vue.js&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
+## Screenshots
+
+| Login | Lobby |
+|:---:|:---:|
+| ![Tela de login do ChessDuel](docs/screenshots/login.png) | ![Lobby do ChessDuel](docs/screenshots/lobby.png) |
+
 
 ## Stack
 
@@ -124,8 +131,7 @@ licença CC0. Não é necessário importar o arquivo inteiro. Baixe e descompact
 ```bash
 curl -L https://database.lichess.org/lichess_db_puzzle.csv.zst \
   -o backend/priv/repo/lichess_db_puzzle.csv.zst
-unzstd backend/priv/repo/lichess_db_puzzle.csv.zst \
-  -o backend/priv/repo/lichess_puzzles.csv
+unzstd backend/priv/repo/lichess_db_puzzle.csv.zst
 ```
 
 Depois das migrations, importe um subconjunto distribuído por rating:
@@ -133,7 +139,7 @@ Depois das migrations, importe um subconjunto distribuído por rating:
 ```bash
 cd backend
 mix ecto.migrate
-mix puzzles.import priv/repo/lichess_puzzles.csv
+mix puzzles.import
 ```
 
 Por padrão, o importador lê o arquivo em streaming, aceita popularidade mínima

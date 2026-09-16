@@ -1,5 +1,7 @@
 # Env
 .env
+.env.local
+.env.*.local
 
 # Elixir / Phoenix
 /backend/_build/
@@ -28,3 +30,7 @@
 
 # Docker
 docker-compose.override.yml
+
+# Uploads e dados locais
+/backend/priv/static/uploads/
+/data/

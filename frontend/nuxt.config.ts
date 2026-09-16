@@ -5,6 +5,9 @@ export default defineNuxtConfig({
   modules: ['@pinia/nuxt'],
 
   css: [
+    '@fontsource-variable/inter/wght.css',
+    '@fontsource-variable/lora/wght.css',
+    '@fontsource-variable/roboto-mono/wght.css',
     '~/assets/css/theme.css',
     '@lichess-org/chessground/assets/chessground.base.css',
     '@lichess-org/chessground/assets/chessground.brown.css',

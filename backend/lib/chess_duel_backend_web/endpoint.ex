@@ -3,7 +3,7 @@ defmodule ChessDuelBackendWeb.Endpoint do
 
   # CORS: aplicado primeiro para responder a preflight OPTIONS que
   # chegam antes do roteador.
-  plug CORSPlug, Application.get_env(:chess_duel_backend, :cors, [])
+  plug ChessDuelBackendWeb.Plugs.RuntimeCors
 
   # The session will be stored in the cookie and signed
   # (this is only kept for compatibility; we don't use it for now).
@@ -17,10 +17,11 @@ defmodule ChessDuelBackendWeb.Endpoint do
     websocket: true,
     longpoll: false
 
-  plug Plug.Static,
-    at: "/uploads",
-    from: {:chess_duel_backend, "priv/static/uploads"},
-    gzip: false
+  socket "/spectator_socket", ChessDuelBackendWeb.SpectatorSocket,
+    websocket: true,
+    longpoll: false
+
+  plug ChessDuelBackendWeb.Plugs.UploadStatic
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
@@ -39,4 +40,6 @@ defmodule ChessDuelBackendWeb.Endpoint do
   plug Plug.Session, @session_options
 
   plug ChessDuelBackendWeb.Router
+
+  def public_host, do: config(:url) |> Keyword.fetch!(:host)
 end

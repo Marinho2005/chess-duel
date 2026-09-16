@@ -51,23 +51,28 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
         started_at = DateTime.add(created_at, preparation_ms, :millisecond)
         timer = Process.send_after(self(), :expire, duration_ms + preparation_ms)
 
-        {:ok,
-         %{
-           session_id: opts[:session_id],
-           user_id: opts[:user_id],
-           duration_seconds: opts[:duration_seconds],
-           started_at: started_at,
-           ends_at: DateTime.add(started_at, duration_ms, :millisecond),
-           starts_at_ms: System.monotonic_time(:millisecond) + preparation_ms,
-           deadline_ms: System.monotonic_time(:millisecond) + preparation_ms + duration_ms,
-           timer: timer,
-           puzzle: puzzle,
-           expected_index: 1,
-           score: 0,
-           errors: 0,
-           seen_ids: MapSet.new([puzzle.id]),
-           finished_at: nil
-         }}
+        state = %{
+          session_id: opts[:session_id],
+          user_id: opts[:user_id],
+          duration_seconds: opts[:duration_seconds],
+          started_at: started_at,
+          ends_at: DateTime.add(started_at, duration_ms, :millisecond),
+          starts_at_ms: System.monotonic_time(:millisecond) + preparation_ms,
+          deadline_ms: System.monotonic_time(:millisecond) + preparation_ms + duration_ms,
+          timer: timer,
+          puzzle: puzzle,
+          expected_index: 1,
+          score: 0,
+          errors: 0,
+          seen_ids: MapSet.new([puzzle.id]),
+          prefetched: %{},
+          finished_at: nil
+        }
+
+        if Application.get_env(:chess_duel_backend, :puzzle_rush_prefetch, true),
+          do: prefetch_scores(state, [0, 1])
+
+        {:ok, state}
     end
   end
 
@@ -118,6 +123,27 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
 
   def handle_info(:stop, state), do: {:stop, :normal, state}
 
+  def handle_info({:prefetch, score, excluded_ids}, state) do
+    if Map.has_key?(state.prefetched, score) do
+      {:noreply, state}
+    else
+      parent = self()
+
+      Task.start(fn ->
+        puzzle = select_for_score(score, excluded_ids)
+        send(parent, {:prefetched, score, puzzle})
+      end)
+
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:prefetched, _score, nil}, state), do: {:noreply, state}
+
+  def handle_info({:prefetched, score, puzzle}, state) do
+    {:noreply, update_in(state.prefetched, &Map.put_new(&1, score, puzzle))}
+  end
+
   defp advance_solution(state, index) do
     automatic_index = index + 1
     next_index = index + 2
@@ -153,7 +179,10 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
   end
 
   defp advance_puzzle(state, score, errors, status) do
-    case select_for_score(score, MapSet.to_list(state.seen_ids)) do
+    puzzle =
+      Map.get(state.prefetched, score) || select_for_score(score, MapSet.to_list(state.seen_ids))
+
+    case puzzle do
       nil ->
         state = finish(%{state | score: score, errors: errors})
         {:reply, {:ok, result_payload(state)}, state}
@@ -165,8 +194,12 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
             expected_index: 1,
             score: score,
             errors: errors,
-            seen_ids: MapSet.put(state.seen_ids, puzzle.id)
+            seen_ids: MapSet.put(state.seen_ids, puzzle.id),
+            prefetched: Map.delete(state.prefetched, score)
         }
+
+        if Application.get_env(:chess_duel_backend, :puzzle_rush_prefetch, true),
+          do: prefetch_scores(next_state, [score, score + 1])
 
         payload =
           base_payload(next_state)
@@ -179,6 +212,15 @@ defmodule ChessDuelBackend.Puzzles.RushServer do
 
         {:reply, {:ok, payload}, next_state}
     end
+  end
+
+  defp prefetch_scores(state, scores) do
+    excluded_ids = MapSet.to_list(state.seen_ids) ++ Enum.map(Map.values(state.prefetched), & &1.id)
+
+    Enum.each(scores, fn score ->
+      if not Map.has_key?(state.prefetched, score),
+        do: send(self(), {:prefetch, score, excluded_ids})
+    end)
   end
 
   defp finish(%{finished_at: nil} = state) do

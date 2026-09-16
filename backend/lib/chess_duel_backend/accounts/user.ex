@@ -6,6 +6,9 @@ defmodule ChessDuelBackend.Accounts.User do
   @foreign_key_type :binary_id
   schema "users" do
     field :email, :string
+    field :role, Ecto.Enum, values: [:user, :admin], default: :user
+    field :account_status, Ecto.Enum, values: [:active, :suspended, :banned], default: :active
+    field :suspended_until, :utc_datetime_usec
     field :nickname, :string
     field :country, :string
     field :country_code, :string
@@ -16,6 +19,8 @@ defmodule ChessDuelBackend.Accounts.User do
     field :rapid_rating, :integer, default: 1200
     field :puzzle_rating, :integer, default: 1200
     field :battle_rating, :integer, default: 1200
+    field :profile_views, :integer, default: 0
+    field :birth_date, :date
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :confirmed_at, :naive_datetime
@@ -28,23 +33,25 @@ defmodule ChessDuelBackend.Accounts.User do
   @doc "Changeset usado no cadastro local por email e senha."
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :nickname, :password])
+    |> cast(attrs, [:email, :nickname, :password, :birth_date])
     |> validate_email(opts)
     |> validate_nickname(opts)
     |> validate_confirmation(:password, message: "does not match password")
     |> validate_password(opts)
+    |> validate_birth_date()
   end
 
   @doc "Changeset dos dados publicos editaveis do perfil."
   def profile_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:nickname, :country, :country_code])
+    |> cast(attrs, [:nickname, :country, :country_code, :birth_date])
     |> validate_nickname(opts)
     |> validate_length(:country, max: 56)
     |> update_change(:country_code, &normalize_country_code/1)
     |> validate_format(:country_code, ~r/^[A-Z]{2}$/,
       message: "must be a two-letter ISO country code"
     )
+    |> validate_birth_date()
   end
 
   def avatar_changeset(user, avatar_path) do
@@ -55,6 +62,14 @@ defmodule ChessDuelBackend.Accounts.User do
     do: value |> String.trim() |> String.upcase()
 
   defp normalize_country_code(value), do: value
+
+  defp validate_birth_date(changeset) do
+    validate_change(changeset, :birth_date, fn :birth_date, date ->
+      if Date.after?(date, Date.utc_today()),
+        do: [birth_date: "não pode ser uma data futura"],
+        else: []
+    end)
+  end
 
   @doc "Changeset para criar uma conta autenticada por um provedor OAuth."
   def oauth_registration_changeset(user, attrs) do

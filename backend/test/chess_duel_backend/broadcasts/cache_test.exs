@@ -32,6 +32,22 @@ defmodule ChessDuelBackend.Broadcasts.CacheTest do
     assert [] = Cache.list_games(cache)
   end
 
+  test "broadcasts clock synchronization even without a new move" do
+    first = Map.put(game("same", []), :live_clock, %{think_time_ms: 10_000, sampled_at_ms: 100_000})
+    second = %{first | live_clock: %{think_time_ms: 30_000, sampled_at_ms: 120_000}}
+    {:ok, responses} = Agent.start_link(fn -> [{:ok, [first]}, {:ok, [second]}] end)
+    client = fn -> Agent.get_and_update(responses, fn [next | rest] -> {next, rest} end) end
+    cache = start_supervised!({Cache, name: nil, client: client, auto_refresh: false})
+    Phoenix.PubSub.subscribe(ChessDuelBackend.PubSub, "broadcast_watch:game-1")
+    assert :ok = Cache.refresh(cache)
+    assert :ok = Cache.refresh(cache)
+
+    assert_receive %{
+      event: "broadcast_move",
+      payload: %{fen: "same", live_clock: %{think_time_ms: 30_000}}
+    }
+  end
+
   test "groups live games by tournament without mixing them" do
     open = game("open-fen", [])
 
@@ -55,6 +71,50 @@ defmodule ChessDuelBackend.Broadcasts.CacheTest do
     assert [%{game_id: "game-1"}] = Cache.list_tournament_games("open", cache)
     assert [%{game_id: "game-2"}] = Cache.list_tournament_games("masters", cache)
     assert [] = Cache.list_tournament_games("missing", cache)
+  end
+
+  test "keeps catalog entries without games and preserves a failed round snapshot" do
+    previous = Map.put(game("start", []), :round_id, "round123")
+
+    tournaments = [
+      %{tournament_id: "open", name: "Open", image_url: nil, live_games: nil},
+      %{tournament_id: "other", name: "Other", image_url: nil, live_games: nil}
+    ]
+
+    snapshot = %{
+      games: [],
+      tournaments: tournaments,
+      failed_rounds: ["round123"],
+      rate_limited: false
+    }
+
+    {:ok, responses} = Agent.start_link(fn -> [{:ok, [previous]}, {:ok, snapshot}] end)
+    client = fn -> Agent.get_and_update(responses, fn [next | rest] -> {next, rest} end) end
+    cache = start_supervised!({Cache, name: nil, client: client, auto_refresh: false})
+    assert :ok = Cache.refresh(cache)
+    assert :ok = Cache.refresh(cache)
+    assert [^previous] = Cache.list_games(cache)
+
+    assert [%{tournament_id: "open", live_games: 1}, %{tournament_id: "other", live_games: nil}] =
+             Cache.list_tournaments(cache)
+  end
+
+  test "automatic refresh does not block catalog reads" do
+    parent = self()
+
+    client = fn ->
+      send(parent, {:refresh_started, self()})
+
+      receive do
+        :release -> {:ok, []}
+      end
+    end
+
+    cache = start_supervised!({Cache, name: nil, client: client, auto_refresh: false})
+    send(cache, :refresh)
+    assert_receive {:refresh_started, worker}
+    assert [] = Cache.list_tournaments(cache)
+    send(worker, :release)
   end
 
   defp game(fen, moves),

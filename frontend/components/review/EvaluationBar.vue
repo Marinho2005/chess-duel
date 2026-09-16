@@ -179,7 +179,7 @@ const accessibleLabel = computed(() => {
   z-index: 2;
   height: 2px;
   background: rgba(146, 91, 53, 0.72);
-  box-shadow: 0 0 5px rgba(146, 91, 53, 0.36);
+  box-shadow: none;
   transform: translateY(-1px);
   transition: top 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -193,7 +193,7 @@ const accessibleLabel = computed(() => {
   align-items: center;
   z-index: 3;
   pointer-events: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.67rem;
   font-weight: 800;
   letter-spacing: -0.045em;

@@ -37,6 +37,7 @@ defmodule ChessDuelBackendWeb do
   def channel do
     quote do
       use Phoenix.Channel
+      @before_compile ChessDuelBackendWeb.ChannelAccess
     end
   end
 

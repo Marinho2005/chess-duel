@@ -1,0 +1,3 @@
+<script setup lang="ts">defineProps<{title:string;rows:Array<[string,string|number]>}>()</script>
+<template><section class="panel stat-card"><h2>{{title}}</h2><dl><div v-for="row in rows" :key="row[0]"><dt>{{row[0]}}</dt><dd>{{row[1]}}</dd></div></dl></section></template>
+<style scoped>.panel{padding:1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}h2{margin:0;font-size:1.05rem}dl{margin:.8rem 0 0}dl div{display:flex;justify-content:space-between;padding:.65rem 0;border-top:1px solid var(--border-subtle)}dt{color:var(--text-muted)}dd{margin:0;font-weight:800}</style>

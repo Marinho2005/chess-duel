@@ -3,7 +3,10 @@ deps
 cover
 .elixir_ls
 priv/chess_validator/node_modules
-priv/static/uploads/avatars/*
-!priv/static/uploads/avatars/.gitkeep
+priv/static/uploads
+.env
+.env.*
+.git
+priv/repo/lichess_db_puzzle.csv*
 *.log
 erl_crash.dump
