@@ -117,6 +117,10 @@ defmodule ChessDuelBackendWeb.GameChannel do
     rematch_reply(Rematches.accept_bot(socket.assigns.game_id, socket.assigns.user_id), socket)
   end
 
+  def spectator_players(state) do
+    %{white_player: public_player(state, :white), black_player: public_player(state, :black)}
+  end
+
   defp public_state(state, player_color) do
     %{
       moves: state.moves,

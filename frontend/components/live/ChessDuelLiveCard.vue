@@ -16,7 +16,8 @@ defineProps<{ game: ChessDuelLiveGame }>()
 </template>
 
 <style scoped>
-.live-card { display: grid; min-width: 0; gap: .85rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow); }
+.live-card { display: grid; min-width: 0; gap: .85rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; }
+.live-card :deep(.readonly-board) { box-shadow: none; }
 header { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: .74rem; font-weight: 700; }.live-badge { padding: .25rem .45rem; color: var(--danger); background: var(--danger-soft); border-radius: 999px; font-size: .65rem; font-weight: 800; letter-spacing: .06em; }
 .players { display: grid; gap: .6rem; }.players p { display: grid; min-width: 0; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: .65rem; margin: 0; }.players p > span { display: grid; min-width: 0; gap: .12rem; }.players strong { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }.players small { color: var(--text-muted); }.players b { flex: none; color: var(--text); font-variant-numeric: tabular-nums; }
 </style>

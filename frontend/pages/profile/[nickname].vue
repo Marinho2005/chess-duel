@@ -90,7 +90,7 @@ function memberSince(date: string) {
 <style scoped>
 .profile-shell { min-height: 100vh; padding: clamp(1.2rem, 5vw, 4rem); color: #3c2b20; background-color: #f4eddf; background-image: radial-gradient(#bba98e35 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: var(--font-sans); }
 .back { display: inline-block; margin-bottom: 2rem; color: #7f5130; text-decoration: none; }.back:hover { text-decoration: underline; }
-.card { width: min(720px, 100%); margin: 5vh auto 0; padding: clamp(1.5rem, 5vw, 3rem); background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 22px; box-shadow: 0 20px 45px #6f45281c; }
+.card { width: min(720px, 100%); margin: 5vh auto 0; padding: clamp(1.5rem, 5vw, 3rem); background: #fffaf0e8; border: 1px solid #eadcc7; border-radius: 22px; box-shadow: 0 20px 45px rgb(0 0 0 / 14%); }
 .identity { display: flex; align-items: center; gap: 1.5rem; }.avatar { display: grid; flex: 0 0 auto; width: 92px; height: 92px; place-items: center; color: white; object-fit: cover; background: #6f4528; border-radius: 50%; font: 700 2.2rem var(--font-serif); }
 .eyebrow { color: #6f4528; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }.identity h1 { margin: 0.3rem 0; font: 500 clamp(2rem, 6vw, 3.4rem) var(--font-serif); }.identity p, .member { margin: 0; color: #857060; }
 .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 2.5rem 0; }.stats article { display: grid; gap: 0.35rem; padding: 1.4rem; background: #efe3cf; border: 1px solid #dfcfb8; border-radius: 14px; }.stats strong { color: #6f4528; font: 500 1.8rem var(--font-serif); }.stats span { color: #806d5d; }

@@ -25,8 +25,16 @@ function playerMeta(title: string | null, rating: number | null) {
 </template>
 
 <style scoped>
-.live-card { position: relative; min-width: 0; padding: 1rem; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow); }
-.card-link { display: grid; gap: .85rem; color: var(--text); text-decoration: none; }.card-link:hover header > span:last-child { color: var(--accent); }
-header { display: grid; gap: .35rem; min-width: 0; } header > span { overflow: hidden; font-size: .76rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; transition: color 160ms ease; }
-.players { display: grid; gap: .45rem; font-size: .84rem; }.players p { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: .5rem; margin: 0; }.players strong { overflow: hidden; font-size: .84rem; text-overflow: ellipsis; white-space: nowrap; }.players small { flex: none; color: var(--text-muted); font-size: .74rem; }
+.live-card { position: relative; min-width: 0; padding: 1rem; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; }
+.card-link { display: grid; min-width: 0; gap: .85rem; color: var(--text); text-decoration: none; }
+.card-link:hover header > span:first-child { text-decoration: underline; text-underline-offset: .2em; }
+.card-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 4px; }
+header { display: grid; gap: .35rem; min-width: 0; }
+header > span { font-size: .875rem; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; text-wrap: pretty; }
+header > span:last-child { color: var(--text-muted); font-weight: 400; }
+.players { display: grid; gap: .5rem; }
+.players p { display: flex; flex-wrap: wrap; min-width: 0; align-items: baseline; justify-content: space-between; gap: .25rem .5rem; margin: 0; }
+.players strong { min-width: 0; font-size: .875rem; line-height: 1.45; overflow-wrap: anywhere; }
+.players small { color: var(--text-muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.card-link :deep(.readonly-board) { box-shadow: none; }
 </style>

@@ -29,7 +29,7 @@ withDefaults(defineProps<{ showWord?: boolean }>(), { showWord: true })
   overflow: visible;
   color: var(--brand-mark-color, var(--accent));
   fill: currentColor;
-  filter: drop-shadow(0 .12em .22em color-mix(in srgb, currentColor 20%, transparent));
+  filter: none;
 }
 .brand-logo__word {
   font-family: var(--font-brand);

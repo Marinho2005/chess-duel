@@ -5,21 +5,19 @@ defmodule ChessDuelBackend.GameAnalysis do
   alias ChessDuelBackend.Games.Game
   alias ChessDuelBackend.Repo
 
-  def request(game_id, user_id) do
-    with {:ok, game} <- authorized_finished_game(game_id, user_id),
+  def request(game_id, _user_id) do
+    with {:ok, game} <- finished_game(game_id),
          {:ok, analysis} <- get_or_create(game) do
       maybe_enqueue(analysis)
       {:ok, analysis, game}
     end
   end
 
-  def get(game_id, user_id) do
-    with {:ok, game} <- authorized_finished_game(game_id, user_id),
-         %Analysis{} = analysis <- Repo.get_by(Analysis, game_id: game.id) do
+  def get(game_id, _user_id) do
+    with {:ok, game} <- finished_game(game_id) do
+      # Reading a replay never schedules Stockfish work.
+      analysis = Repo.get_by(Analysis, game_id: game.id) || %Analysis{status: "missing"}
       {:ok, analysis, game}
-    else
-      nil -> {:error, :not_found}
-      error -> error
     end
   end
 
@@ -49,7 +47,15 @@ defmodule ChessDuelBackend.GameAnalysis do
     end
   end
 
-  defp authorized_finished_game(id, user_id) do
+  defp finished_game(id) do
+    with {:ok, uuid} <- Ecto.UUID.cast(id) do
+      find_finished_game(uuid)
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp find_finished_game(id) do
     case Repo.get(Game, id) do
       nil ->
         {:error, :not_found}
@@ -57,11 +63,8 @@ defmodule ChessDuelBackend.GameAnalysis do
       %Game{status: status} when status != "finished" ->
         {:error, :unfinished}
 
-      %Game{} = game when game.white_player_id == user_id or game.black_player_id == user_id ->
+      %Game{} = game ->
         {:ok, game}
-
-      %Game{} ->
-        {:error, :forbidden}
     end
   end
 

@@ -20,7 +20,7 @@ config :chess_duel_backend, Oban,
   queues: [analysis: 1]
 
 config :chess_duel_backend, :stockfish,
-  path: System.get_env("STOCKFISH_PATH"),
+  path: nil,
   depth: 12,
   hash_mb: 32,
   threads: 1

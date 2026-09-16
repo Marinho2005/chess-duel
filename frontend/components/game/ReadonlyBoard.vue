@@ -26,8 +26,8 @@ function config() {
     orientation: props.orientation,
     turnColor: props.fen.split(' ')[1] === 'b' ? 'black' as const : 'white' as const,
     lastMove: props.lastMove || undefined,
-    coordinates: true,
-    coordinatesOnSquares: true,
+    coordinates: false,
+    coordinatesOnSquares: false,
     animation: { enabled: props.animationDuration > 0, duration: props.animationDuration },
     movable: { color: undefined },
     premovable: { enabled: false },
@@ -41,5 +41,5 @@ function config() {
 <template><div ref="element" class="cg-wrap readonly-board" :aria-label="label" /></template>
 
 <style scoped>
-.readonly-board { width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 14px 34px rgb(63 42 25 / 18%); cursor: default; }
+.readonly-board { width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 8px; box-shadow: 0 14px 34px rgb(0 0 0 / 18%); cursor: default; }
 </style>

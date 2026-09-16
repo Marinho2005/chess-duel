@@ -12,6 +12,8 @@ const props = withDefaults(defineProps<{
 
 const config = useRuntimeConfig()
 const imageUrl = computed(() => resolveAvatarUrl(props.avatarUrl, config.public.api.baseURL))
+const imageFailed = ref(false)
+watch(imageUrl, () => { imageFailed.value = false })
 const statusLabels: Record<PresenceStatus, string> = {
   online: 'Online',
   offline: 'Offline',
@@ -23,7 +25,7 @@ const statusLabels: Record<PresenceStatus, string> = {
 
 <template>
   <span class="presence-avatar" :style="{ '--avatar-size': `${size}px` }">
-    <img v-if="imageUrl" :src="imageUrl" :alt="`Foto de ${name}`">
+    <img v-if="imageUrl && !imageFailed" :key="imageUrl" :src="imageUrl" :alt="`Foto de ${name}`" referrerpolicy="no-referrer" @error="imageFailed = true">
     <span v-else class="fallback" aria-hidden="true">{{ name.charAt(0).toUpperCase() || '?' }}</span>
     <span class="status-dot" :class="status" role="img" :aria-label="statusLabels[status]" :title="statusLabels[status]" />
   </span>
