@@ -1,0 +1,43 @@
+# Somente teste local: projeto, portas e volumes separados do Compose de dev.
+name: chessduel_release_test
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: release_test
+      POSTGRES_PASSWORD: release_test_only
+      POSTGRES_DB: release_test
+    volumes:
+      - database:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U release_test -d release_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  valkey:
+    image: valkey/valkey:8
+  backend:
+    image: chessduel-block1:local
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://release_test:release_test_only@postgres:5432/release_test
+      DATABASE_SSL_MODE: disable
+      VALKEY_URL: redis://valkey:6379
+      SECRET_KEY_BASE: local-release-smoke-test-only-not-a-production-secret-01234567890123456789
+      PHX_HOST: ${RELEASE_TEST_HOST:-api.chessduel.app}
+      FRONTEND_URL: ${RELEASE_TEST_ORIGIN:-https://chessduel.app}
+      ALLOWED_ORIGINS: ${RELEASE_TEST_ORIGIN:-https://chessduel.app}
+      UPLOADS_DIR: /data/uploads
+      PORT: "4000"
+    ports:
+      - "127.0.0.1:4400:4000"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+volumes:
+  database:
+  uploads:

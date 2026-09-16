@@ -30,6 +30,8 @@ const items = [
 ]
 
 const avatarUrl = computed(() => resolveAvatarUrl(auth.user?.avatar_url, config.public.api.baseURL))
+const avatarFailed = ref(false)
+watch([avatarUrl, () => auth.user?.id], () => { avatarFailed.value = false })
 const presenceLabel = computed(() => presenceLabels[auth.presence])
 const incomingRequests = computed(() => friendshipNotifications.value.filter(item => item.status === 'pending' && item.direction === 'incoming'))
 const notificationCount = computed(() => incomingRequests.value.length)
@@ -167,7 +169,7 @@ onBeforeUnmount(() => {
         </button>
         <NuxtLink v-if="auth.user" class="profile-avatar-link" :to="`/user/${encodeURIComponent(auth.user.nickname)}`" aria-label="Abrir seu perfil" title="Abrir seu perfil">
           <span class="profile-avatar">
-            <img v-if="avatarUrl" :src="avatarUrl" alt="">
+            <img v-if="avatarUrl && !avatarFailed" :key="avatarUrl" :src="avatarUrl" alt="" referrerpolicy="no-referrer" @error="avatarFailed = true">
             <span v-else class="avatar-fallback">{{ auth.user?.nickname?.charAt(0).toUpperCase() || '♟' }}</span>
             <span class="profile-status-dot" :class="auth.presence" role="img" :aria-label="presenceLabel" :title="presenceLabel" />
           </span>
@@ -231,7 +233,7 @@ onBeforeUnmount(() => {
 .profile-avatar { position: relative; display: inline-grid; width: 38px; height: 38px; flex: 0 0 auto; }
 .profile-avatar-link { padding: 0; }.profile-avatar-link:hover { background: transparent; }.profile-avatar-link img, .avatar-fallback { display: grid; width: 38px; height: 38px; place-items: center; object-fit: cover; color: var(--accent-ink); background: var(--accent); border-radius: 10px; font-weight: 800; }
 .profile-status-dot { position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; background: var(--success); border: 3px solid var(--bg-elevated); border-radius: 50%; box-sizing: content-box; }
-.profile-status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.profile-status-dot.online { background: var(--success); }
 .profile-status-dot.away { background: #e7a83e; }
 .profile-status-dot.dnd { background: var(--danger); }
 .profile-status-dot.dnd::after { position: absolute; top: 4px; right: 2px; left: 2px; height: 2px; content: ''; background: var(--bg-elevated); border-radius: 2px; }

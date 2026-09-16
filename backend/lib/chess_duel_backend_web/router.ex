@@ -18,6 +18,11 @@ defmodule ChessDuelBackendWeb.Router do
     plug ChessDuelBackendWeb.UserAuth, :require_admin
   end
 
+  scope "/api", ChessDuelBackendWeb do
+    pipe_through [:api, :optional_authenticated_api]
+    get "/games/:id/analysis", GameAnalysisController, :show
+  end
+
   scope "/api/admin", ChessDuelBackendWeb do
     pipe_through [:api, :authenticated_api, :admin_api]
     get "/dashboard", AdminController, :dashboard
@@ -83,7 +88,6 @@ defmodule ChessDuelBackendWeb.Router do
     get "/bots", BotGameController, :index
     post "/bot-games", BotGameController, :create
     post "/games/:id/analyze", GameAnalysisController, :create
-    get "/games/:id/analysis", GameAnalysisController, :show
     get "/puzzles/next", PuzzleController, :next
     get "/puzzles/summary", PuzzleController, :summary
     post "/puzzles/:id/attempt", PuzzleController, :attempt

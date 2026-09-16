@@ -159,7 +159,9 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
       <p v-if="registrationError || auth.error || oauthError" class="error">{{ registrationError || auth.error || oauthError }}</p>
     </form>
 
-   
+    <footer class="developer-credit" lang="en">
+      developed by <span>Victor Marinho Lima</span>
+    </footer>
   </main>
 </template>
 
@@ -187,16 +189,16 @@ function socialLogin(provider: 'google' | 'discord' | 'github') {
 .brand { text-align: center; }
 .brand-title { color: var(--brown); font-size: clamp(3rem, 8vw, 5rem); }
 .brand p { margin: 0.65rem 0 0; color: #5f4a37; font: italic 1.25rem var(--font-serif); letter-spacing: 0.08em; }
-.auth-card { display: grid; box-sizing: border-box; width: min(560px, calc(100vw - 2rem)); gap: 1rem; padding: 2rem; background: #fffaf0dd; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px #6f45281c; }
+.auth-card { display: grid; box-sizing: border-box; width: min(560px, calc(100vw - 2rem)); gap: 1rem; padding: 2rem; background: #fffaf0dd; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px rgb(0 0 0 / 14%); }
 .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; padding: 0.3rem; background: #efe2ce; border: 1px solid #dfd2c1; border-radius: 12px; }
 .tabs button { border: 0; background: transparent; box-shadow: none; }
-.tabs button.active { color: #fffaf0; background: var(--brown); box-shadow: 0 6px 14px #6f452822; }
+.tabs button.active { color: #fffaf0; background: var(--brown); box-shadow: 0 6px 14px rgb(0 0 0 / 14%); }
 label { display: grid; min-width: 0; gap: 0.45rem; color: #6e5847; font-size: 0.9rem; }
 .password-row { display:grid; min-width:0; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:.7rem; }.password-row.single { grid-template-columns:minmax(0,1fr); }label small { color:var(--text-muted); font-weight:500; }
 input, button { box-sizing:border-box; min-width:0; max-width:100%; padding: 0.9rem 1rem; color: inherit; background: #fff; border: 1px solid #dfd2c1; border-radius: 10px; font: inherit; transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
 input { width:100%; }
 button { cursor: pointer; }
-.primary { color: white; font-weight: 700; background: var(--brown); border-color: var(--brown); box-shadow: 0 8px 16px #6f45282b; }
+.primary { color: white; font-weight: 700; background: var(--brown); border-color: var(--brown); box-shadow: 0 8px 16px rgb(0 0 0 / 14%); }
 .primary:hover:not(:disabled) { background: #7f5130; border-color: #7f5130; transform: translateY(-1px); }
 .primary:disabled { opacity: 0.65; cursor: wait; }
 .divider { display: flex; align-items: center; gap: 0.75rem; color: #9a8471; font-size: 0.8rem; }
@@ -207,7 +209,7 @@ button { cursor: pointer; }
 .social.discord { color: #5865f2; }
 .social.github { color: #24292f; }
 .google-icon, .social-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
-.social:hover { transform: translateY(-1px); box-shadow: 0 5px 12px #6f45281c; }
+.social:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgb(0 0 0 / 14%); }
 .guest-link { padding: 0.35rem; color: #806d5d; background: transparent; border: 0; text-decoration: underline; text-underline-offset: 3px; }
 .guest-link:hover { color: var(--brown); background: #efe2ce; }
 .hint { margin: -0.4rem 0 0; color: #8b7664; font-size: 0.82rem; }
@@ -221,4 +223,14 @@ button { cursor: pointer; }
 .tabs { gap: 0; padding: 0; overflow: hidden; background: var(--surface-strong); border: 0; border-radius: 11px; }.tabs button { min-height: 46px; color: var(--text-muted); background: transparent; border: 0; border-radius: 10px; font-weight: 500; }.tabs button.active { color: var(--text); background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 5%); }
 .brand-title { display: flex; align-items: center; justify-content: center; color: var(--text); }
 .brand-title > :deep(.brand-logo) { color: var(--text); }
+.developer-credit {
+  max-width: 100%;
+  color: var(--text-muted);
+  font-family: var(--font-serif);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: pretty;
+}
+.developer-credit span { color: var(--text); font-weight: 500; }
 </style>

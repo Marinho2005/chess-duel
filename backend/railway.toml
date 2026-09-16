@@ -1,0 +1,14 @@
+# Root Directory = /backend; Config File = /backend/railway.toml.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+preDeployCommand = "bin/chess_duel_backend eval 'ChessDuelBackend.Release.migrate()'"
+# Usar o CMD da imagem para preservar o entrypoint que prepara o volume.
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+numReplicas = 1
+sleepApplication = false

@@ -41,7 +41,7 @@ onMounted(async () => {
 
 <style scoped>
 .confirmation-shell { display: grid; min-height: 100vh; place-items: center; padding: 1rem; color: #3c2b20; background: #f4eddf radial-gradient(#bba98e40 0.7px, transparent 0.7px); background-size: 5px 5px; font-family: var(--font-sans); }
-.confirmation-card { width: min(440px, 100%); padding: 2.5rem; text-align: center; background: #fffaf0e8; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px #6f45281c; }
+.confirmation-card { width: min(440px, 100%); padding: 2.5rem; text-align: center; background: #fffaf0e8; border: 1px solid #e8dac4; border-radius: 18px; box-shadow: 0 20px 45px rgb(0 0 0 / 14%); }
 .brand { --brand-mark-color: #6f4528; margin-bottom: 1.5rem; color: #6f4528; font-size: 2.2rem; }
 h1 { font: 700 1.8rem var(--font-serif); }
 p { color: #6e5847; line-height: 1.6; }

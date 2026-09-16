@@ -63,8 +63,8 @@ function boardConfig() {
     turnColor: props.turnColor,
     lastMove: props.lastMove || undefined,
     check: props.check ? props.turnColor : false,
-    coordinates: true,
-    coordinatesOnSquares: true,
+    coordinates: false,
+    coordinatesOnSquares: false,
     disableContextMenu: true,
     animation: { enabled: props.animationDuration > 0, duration: props.animationDuration },
     movable: {
@@ -120,6 +120,6 @@ function handleMove(from: Key, to: Key, metadata: { premove: boolean }) {
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 8px;
-  box-shadow: 0 18px 45px #3f2a1938;
+  box-shadow: 0 18px 45px rgb(0 0 0 / 14%);
 }
 </style>

@@ -20,8 +20,9 @@ defmodule ChessDuelBackendWeb.GameAnalysisController do
   end
 
   def show(conn, %{"id" => id}) do
-    case GameAnalysis.get(id, conn.assigns.current_user.id) do
-      {:ok, analysis, game} -> json(conn, payload(analysis, game, conn.assigns.current_user.id))
+    user_id = conn.assigns[:current_user] && conn.assigns.current_user.id
+    case GameAnalysis.get(id, user_id) do
+      {:ok, analysis, game} -> json(conn, payload(analysis, game, user_id))
       error -> render_error(conn, error)
     end
   end
@@ -64,7 +65,7 @@ defmodule ChessDuelBackendWeb.GameAnalysisController do
         moves: game.moves,
         result: game.result,
         end_reason: game.end_reason,
-        viewer_color: if(game.white_player_id == user_id, do: "white", else: "black"),
+        viewer_color: if(not is_nil(user_id) and game.black_player_id == user_id, do: "black", else: "white"),
         white_player: Map.get(players, game.white_player_id),
         black_player: Map.get(players, game.black_player_id)
       }

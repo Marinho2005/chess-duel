@@ -77,7 +77,7 @@ async function logOut() {
     radial-gradient(circle at 20% 0%, #4a2f1a 0%, transparent 34%),
     linear-gradient(155deg, #21160e 0%, #342214 48%, #21170f 100%);
   border-right: 1px solid #8c673f;
-  box-shadow: 12px 0 32px #3c24121a;
+  box-shadow: 12px 0 32px rgb(0 0 0 / 14%);
   font-family: var(--font-sans);
   transition: background 220ms ease, color 220ms ease;
 }
@@ -88,7 +88,7 @@ nav a { position: relative; display: grid; grid-template-columns: 24px 1fr auto;
 nav a::before { position: absolute; left: -1px; width: 3px; height: 0; content: ''; background: #e2ad55; border-radius: 0 4px 4px 0; transition: height 190ms ease; }
 nav a:hover, nav a:focus-visible { color: var(--side-ink); background: var(--side-hover); transform: translateX(2px); }
 nav a:focus-visible { outline: 2px solid #e4b866; outline-offset: 2px; }
-nav a.active { color: var(--side-ink); background: var(--side-active); border-color: var(--side-line); box-shadow: inset 0 1px #fff1d512, 0 7px 18px #140c0730; }
+nav a.active { color: var(--side-ink); background: var(--side-active); border-color: var(--side-line); box-shadow: inset 0 1px rgb(0 0 0 / 14%), 0 7px 18px rgb(0 0 0 / 14%); }
 nav a.active::before { height: 54%; }
 nav a svg { transition: transform 210ms ease, color 210ms ease; transform-origin: center; }
 nav a:hover svg, nav a:focus-visible svg, nav a.active svg { color: #efc477; }
@@ -108,7 +108,7 @@ nav a.active svg { transform: scale(1.04); }
 }
 
 @media (max-width: 760px) {
-  .sidebar { position: sticky; width: 100%; height: auto; padding: .65rem .8rem; flex-direction: row; align-items: center; gap: .5rem; border-right: 0; border-bottom: 1px solid #8c673f; box-shadow: 0 8px 22px #3c24121a; }
+  .sidebar { position: sticky; width: 100%; height: auto; padding: .65rem .8rem; flex-direction: row; align-items: center; gap: .5rem; border-right: 0; border-bottom: 1px solid #8c673f; box-shadow: 0 8px 22px rgb(0 0 0 / 14%); }
   .logo { font-size: 1.3rem; }
   nav { display: flex; flex: 1; justify-content: center; gap: .15rem; }
   nav a { display: flex; padding: .58rem; }
